@@ -1,0 +1,88 @@
+# Canton Scan API Configuration Example
+# Copy this file to config.yaml and update with your actual values
+
+# API Configuration
+api:
+  # Base URL of the Scan API
+  # Example: https://scan.canton.network/api/v1
+  base_url: "https://your-scan-api.example.com/api/v1"
+
+  # Request timeout in seconds
+  timeout: 30
+
+  # Maximum number of retries for failed requests
+  max_retries: 3
+
+# Authentication Configuration
+auth:
+  # JWT Token Configuration
+  # The token must contain:
+  #   - sub: ledgerApiUserId (the user requests should be submitted as)
+  #   - aud: audience-of-app (the audience specified in your app config)
+  # The token must be signed with the specified algorithm (e.g., RS256)
+
+  # Your JWT token
+  jwt_token: "your-jwt-token-here"
+
+  # Alternative: Path to file containing JWT token
+  # jwt_token_file: "/path/to/token.jwt"
+
+  # Token expiry monitoring (optional)
+  # Set to true to enable automatic token expiry warnings
+  monitor_expiry: true
+
+# Query Configuration
+query:
+  # Default batch size for paginated queries
+  default_batch_size: 100
+
+  # Maximum items to retrieve in paginated queries (null for unlimited)
+  max_items: null
+
+  # Default time range for time-based queries (in days)
+  default_time_range_days: 7
+
+# Analysis Configuration
+analysis:
+  # Output directory for reports and plots
+  output_dir: "./output"
+
+  # Default time granularity for time-series analysis
+  # Options: 'hour', 'day', 'week'
+  time_granularity: "hour"
+
+  # Number of days to analyze by default
+  analysis_period_days: 7
+
+  # Enable plot generation
+  generate_plots: true
+
+  # Plot format
+  # Options: 'png', 'pdf', 'svg'
+  plot_format: "png"
+
+  # Plot DPI for raster formats
+  plot_dpi: 300
+
+# Logging Configuration
+logging:
+  # Log level
+  # Options: 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+  level: "INFO"
+
+  # Log file path (null to disable file logging)
+  file: "canton_scan_client.log"
+
+  # Enable console logging
+  console: true
+
+# Cache Configuration (optional)
+cache:
+  # Enable caching
+  enabled: false
+
+  # Cache directory
+  directory: ".cache"
+
+  # Cache TTL in seconds
+  ttl: 3600
