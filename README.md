@@ -10,7 +10,7 @@ A comprehensive Python client for querying and analyzing on-chain data from the 
 from canton_scan_client import SpliceScanClient
 
 # Initialize and start querying - that's it!
-client = SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan")
+client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
 updates = client.get_updates(page_size=10)
 print(f"Retrieved {len(updates['updates'])} updates!")
 ```
@@ -71,7 +71,7 @@ pip install requests urllib3
 The Splice Network Scan API is publicly accessible at:
 
 ```
-https://scan.sv.splice.global/api/scan
+https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/
 ```
 
 Simply provide this URL when initializing the client - **no authentication required**!
@@ -82,7 +82,7 @@ You can optionally configure:
 
 ```yaml
 api:
-  base_url: "https://scan.sv.splice.global/api/scan"
+  base_url: "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
   timeout: 30  # Request timeout in seconds
   max_retries: 3  # Number of retry attempts
 ```
@@ -95,7 +95,7 @@ api:
 from canton_scan_client import SpliceScanClient
 
 # Initialize client - no authentication needed!
-client = SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan")
+client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
 
 # Get DSO information
 dso = client.get_dso()
@@ -121,7 +121,7 @@ client.close()
 
 ```python
 # Recommended: use context manager for automatic cleanup
-with SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan") as client:
+with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/") as client:
     # Your queries here
     updates = client.get_updates(page_size=10)
     # Client automatically closes when exiting the context
@@ -202,7 +202,7 @@ python basic_queries.py
 The script uses the public API by default - just run it! You can optionally edit the `BASE_URL` if you're using a different Splice Network instance:
 
 ```python
-BASE_URL = "https://scan.sv.splice.global/api/scan"  # Default public API
+BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"  # Default public API
 ```
 
 ### Data Analysis Example
@@ -388,7 +388,7 @@ except requests.exceptions.RequestException as e:
 
 1. **Use Context Managers**: Always use the client as a context manager to ensure proper cleanup:
    ```python
-   with SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan") as client:
+   with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/") as client:
        # Your code here
    ```
 
@@ -414,7 +414,7 @@ except requests.exceptions.RequestException as e:
 
 ### Connection Errors
 
-- Verify the base URL is correct: `https://scan.sv.splice.global/api/scan`
+- Verify the base URL is correct: `https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/`
 - Check network connectivity
 - Verify firewall rules allow outbound HTTPS connections
 - Ensure DNS resolution is working

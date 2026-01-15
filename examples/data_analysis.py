@@ -414,7 +414,7 @@ def main():
 
     # Configuration - Replace with your actual Splice Scan API URL
     # No authentication required - the API is completely public!
-    BASE_URL = "https://scan.sv.splice.global/api/scan"
+    BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
     # Initialize client - no authentication needed!
     print("Initializing Splice Scan API client (no auth required!)...")
