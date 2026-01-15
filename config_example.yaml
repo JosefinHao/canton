@@ -1,11 +1,12 @@
 # Canton Scan API Configuration Example
-# Copy this file to config.yaml and update with your actual values
+# The Scan API is completely PUBLIC - no authentication required!
+# This configuration file is OPTIONAL and only needed if you want to customize settings.
 
 # API Configuration
 api:
   # Base URL of the Scan API
-  # Example: https://scan.canton.network/api/v1
-  base_url: "https://your-scan-api.example.com/api/v1"
+  # Default: https://scan.canton.network/api/v1 (public, no auth needed!)
+  base_url: "https://scan.canton.network/api/v1"
 
   # Request timeout in seconds
   timeout: 30
@@ -13,23 +14,15 @@ api:
   # Maximum number of retries for failed requests
   max_retries: 3
 
-# Authentication Configuration
+# Authentication Configuration (OPTIONAL - NOT REQUIRED FOR SCAN API)
+# Only needed if you're using this client with other Canton APIs that require auth
 auth:
-  # JWT Token Configuration
-  # The token must contain:
-  #   - sub: ledgerApiUserId (the user requests should be submitted as)
-  #   - aud: audience-of-app (the audience specified in your app config)
-  # The token must be signed with the specified algorithm (e.g., RS256)
-
-  # Your JWT token
-  jwt_token: "your-jwt-token-here"
+  # JWT Token (NOT needed for Scan API!)
+  # Only use this if connecting to other Canton APIs that require authentication
+  jwt_token: null
 
   # Alternative: Path to file containing JWT token
-  # jwt_token_file: "/path/to/token.jwt"
-
-  # Token expiry monitoring (optional)
-  # Set to true to enable automatic token expiry warnings
-  monitor_expiry: true
+  # jwt_token_file: null
 
 # Query Configuration
 query:

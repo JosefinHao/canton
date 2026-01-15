@@ -3,6 +3,9 @@ Data Analysis Examples for Canton Network On-Chain Data
 
 This script demonstrates how to analyze on-chain data retrieved from
 the Canton Network Scan API using pandas and visualization libraries.
+
+The Scan API is completely PUBLIC - no authentication required!
+Just provide the API URL and start analyzing on-chain data immediately.
 """
 
 import sys
@@ -361,16 +364,13 @@ class CantonDataAnalyzer:
 def main():
     """Run data analysis examples."""
 
-    # Configuration - Replace with your actual values
-    BASE_URL = "https://your-scan-api.example.com/api/v1"
-    JWT_TOKEN = "your-jwt-token-here"
+    # Configuration - Replace with your actual Scan API URL
+    # No authentication required - the API is completely public!
+    BASE_URL = "https://scan.canton.network/api/v1"
 
-    # Initialize client
-    print("Initializing Canton Scan API client...")
-    client = CantonScanClient(
-        base_url=BASE_URL,
-        jwt_token=JWT_TOKEN
-    )
+    # Initialize client - no authentication needed!
+    print("Initializing Canton Scan API client (no auth required!)...")
+    client = CantonScanClient(base_url=BASE_URL)
 
     # Initialize analyzer
     analyzer = CantonDataAnalyzer(client)

@@ -3,6 +3,9 @@ Basic Query Examples for Canton Network Scan API
 
 This script demonstrates basic usage of the Canton Scan API client
 to retrieve on-chain data.
+
+The Scan API is completely PUBLIC - no authentication required!
+Just provide the API URL and start querying immediately.
 """
 
 import sys
@@ -18,16 +21,13 @@ from canton_scan_client import CantonScanClient
 def main():
     """Run basic query examples."""
 
-    # Configuration - Replace with your actual values
-    BASE_URL = "https://your-scan-api.example.com/api/v1"
-    JWT_TOKEN = "your-jwt-token-here"
+    # Configuration - Replace with your actual Scan API URL
+    # No authentication required - the API is completely public!
+    BASE_URL = "https://scan.canton.network/api/v1"
 
-    # Initialize client
-    print("Initializing Canton Scan API client...")
-    client = CantonScanClient(
-        base_url=BASE_URL,
-        jwt_token=JWT_TOKEN
-    )
+    # Initialize client - no authentication needed!
+    print("Initializing Canton Scan API client (no auth required!)...")
+    client = CantonScanClient(base_url=BASE_URL)
 
     # Example 1: Health Check
     print("\n" + "="*60)
