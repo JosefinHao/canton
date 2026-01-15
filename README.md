@@ -297,8 +297,7 @@ This will:
 
 ### Utility
 
-- `health_check()` - Check if API is accessible
-- `get_readiness()` - Check API readiness
+- `health_check()` - Check if API is accessible (uses GET /v0/dso)
 
 ## Data Analysis Features
 
