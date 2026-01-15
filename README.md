@@ -2,18 +2,31 @@
 
 A comprehensive Python client for querying and analyzing on-chain data from the Canton Network using the Scan API.
 
+## 🚀 Quick Start - No Authentication Required!
+
+**The Canton Network Scan API is completely PUBLIC** - you can start retrieving on-chain data immediately with zero authentication setup!
+
+```python
+from canton_scan_client import CantonScanClient
+
+# Initialize and start querying - that's it!
+client = CantonScanClient(base_url="https://scan.canton.network/api/v1")
+transactions = client.get_transactions(limit=10)
+print(f"Retrieved {len(transactions['transactions'])} transactions!")
+```
+
 ## Overview
 
 This client provides an easy-to-use interface for:
 - Querying transactions, contracts, and events from the Canton ledger
 - Analyzing on-chain data patterns and trends
 - Generating reports and visualizations
-- Managing JWT authentication for API access
+- All **without any authentication required**!
 
 ## Features
 
+- **Zero Setup**: No authentication, tokens, or credentials required
 - **Full API Coverage**: Support for all major Scan API endpoints
-- **JWT Authentication**: Built-in OAuth2 Bearer token authentication
 - **Robust Error Handling**: Automatic retries and comprehensive error messages
 - **Data Analysis Tools**: Built-in analyzers for transaction volume, contract lifecycle, and party activity
 - **Visualization**: Generate charts and graphs from on-chain data
@@ -25,8 +38,7 @@ This client provides an easy-to-use interface for:
 ### Prerequisites
 
 - Python 3.8 or higher
-- Canton Network access with valid credentials
-- JWT token with appropriate claims
+- That's it! No credentials or authentication needed
 
 ### Setup
 
@@ -46,46 +58,32 @@ pip install -r requirements.txt
 For minimal installation (without data analysis features):
 
 ```bash
-pip install requests urllib3 pyyaml pyjwt cryptography
+pip install requests urllib3
 ```
 
-3. Configure your credentials:
-
-```bash
-cp config_example.yaml config.yaml
-# Edit config.yaml with your actual values
-```
+3. Start using immediately - no configuration needed!
 
 ## Configuration
 
-### JWT Token Requirements
+### API URL
 
-Your JWT token must include the following claims:
+The Canton Network Scan API is publicly accessible at:
 
-```json
-{
-  "sub": "ledgerApiUserId",
-  "aud": "audience-of-app"
-}
+```
+https://scan.canton.network/api/v1
 ```
 
-- **sub**: The ledger API user ID requests should be submitted as (e.g., validator operator user)
-- **aud**: The audience specified in your app's auth configuration
+Simply provide this URL when initializing the client - **no authentication required**!
 
-The token must be signed with the appropriate algorithm (e.g., RS256) and key specified in your Canton validator config.
+### Optional Configuration
 
-### API Configuration
-
-Edit `config.yaml` with your settings:
+You can optionally configure:
 
 ```yaml
 api:
-  base_url: "https://your-scan-api.example.com/api/v1"
-  timeout: 30
-  max_retries: 3
-
-auth:
-  jwt_token: "your-jwt-token-here"
+  base_url: "https://scan.canton.network/api/v1"
+  timeout: 30  # Request timeout in seconds
+  max_retries: 3  # Number of retry attempts
 ```
 
 ## Usage
@@ -95,11 +93,8 @@ auth:
 ```python
 from canton_scan_client import CantonScanClient
 
-# Initialize client
-client = CantonScanClient(
-    base_url="https://your-scan-api.example.com/api/v1",
-    jwt_token="your-jwt-token"
-)
+# Initialize client - no authentication needed!
+client = CantonScanClient(base_url="https://scan.canton.network/api/v1")
 
 # Get recent transactions
 transactions = client.get_transactions(limit=10)
@@ -120,7 +115,8 @@ client.close()
 ### Using Context Manager
 
 ```python
-with CantonScanClient(base_url=BASE_URL, jwt_token=JWT_TOKEN) as client:
+# Recommended: use context manager for automatic cleanup
+with CantonScanClient(base_url="https://scan.canton.network/api/v1") as client:
     # Your queries here
     transactions = client.get_transactions(limit=10)
     # Client automatically closes when exiting the context
@@ -180,46 +176,35 @@ report = analyzer.generate_summary_report()
 print(report)
 ```
 
-### JWT Token Inspection
+### JWT Token Inspection (Optional)
+
+**Note:** JWT authentication is NOT required for the Scan API! However, if you're working with other Canton APIs that require authentication, the included JWT helper utilities can assist you:
 
 ```python
 from examples.jwt_helper import inspect_jwt_token, validate_token_claims
 
-# Inspect token
+# Inspect a JWT token (for other Canton APIs that need auth)
 inspection = inspect_jwt_token(jwt_token)
 print(f"Subject: {inspection['subject']}")
 print(f"Audience: {inspection['audience']}")
 print(f"Expires at: {inspection['expiry']['expires_at']}")
-
-# Validate token claims
-validation = validate_token_claims(
-    jwt_token,
-    expected_audience="https://example.com",
-    expected_subject="validator-user"
-)
-
-if validation['valid']:
-    print("Token is valid")
-else:
-    print("Validation errors:", validation['errors'])
 ```
 
 ## Example Scripts
 
 ### Basic Queries Example
 
-Run the basic queries example to test your setup:
+Run the basic queries example to start retrieving on-chain data:
 
 ```bash
 cd examples
 python basic_queries.py
 ```
 
-Edit the script first to add your API URL and JWT token:
+The script uses the public API by default - just run it! You can optionally edit the `BASE_URL` if you're using a different Canton Network instance:
 
 ```python
-BASE_URL = "https://your-scan-api.example.com/api/v1"
-JWT_TOKEN = "your-jwt-token-here"
+BASE_URL = "https://scan.canton.network/api/v1"  # Default public API
 ```
 
 ### Data Analysis Example
@@ -368,45 +353,42 @@ except requests.exceptions.RequestException as e:
 
 1. **Use Context Managers**: Always use the client as a context manager to ensure proper cleanup:
    ```python
-   with CantonScanClient(base_url, jwt_token) as client:
+   with CantonScanClient(base_url="https://scan.canton.network/api/v1") as client:
        # Your code here
    ```
 
-2. **Monitor Token Expiry**: Check your JWT token expiry regularly and refresh as needed:
-   ```python
-   inspection = inspect_jwt_token(jwt_token)
-   if inspection['expiry']['is_expired']:
-       # Refresh token
-   ```
-
-3. **Use Pagination**: For large datasets, use pagination methods to avoid memory issues:
+2. **Use Pagination**: For large datasets, use pagination methods to avoid memory issues:
    ```python
    all_data = client.get_all_transactions_paginated(batch_size=100)
    ```
 
-4. **Handle Errors**: Always wrap API calls in try-except blocks for production use
+3. **Handle Errors**: Always wrap API calls in try-except blocks for production use:
+   ```python
+   try:
+       transactions = client.get_transactions(limit=10)
+   except Exception as e:
+       print(f"Error: {e}")
+   ```
 
-5. **Rate Limiting**: Be mindful of API rate limits and implement appropriate delays if needed
+4. **Rate Limiting**: Be mindful of API rate limits and implement appropriate delays if needed
+
+5. **Cache Results**: Consider caching frequently accessed data to reduce API calls
 
 ## Troubleshooting
 
-### Authentication Errors (401)
-
-- Verify your JWT token is valid and not expired
-- Check that the token's `sub` and `aud` claims match your configuration
-- Ensure the token is properly signed
-
 ### Connection Errors
 
-- Verify the base URL is correct
+- Verify the base URL is correct: `https://scan.canton.network/api/v1`
 - Check network connectivity
 - Verify firewall rules allow outbound HTTPS connections
+- Ensure DNS resolution is working
 
 ### Empty Results
 
-- Check that your ledger has data in the queried time range
-- Verify your party has permission to view the data
-- Try querying without filters first
+- Check that the ledger has data in the queried time range
+- Try querying without filters first to see if any data is available
+- Verify you're using the correct API endpoint
+- Check the API documentation for supported parameters
 
 ## Contributing
 
@@ -435,8 +417,10 @@ For issues and questions:
 ### Version 1.0.0 (2026-01-15)
 
 - Initial release
-- Full Scan API coverage
-- JWT authentication support
-- Data analysis tools
-- Visualization capabilities
+- Full Scan API coverage (completely public - no authentication required!)
+- Zero-setup instant access to on-chain data
+- Optional JWT authentication support for other Canton APIs
+- Data analysis tools with pandas integration
+- Visualization capabilities with matplotlib/seaborn
 - Comprehensive examples and documentation
+- Context manager support for easy resource management

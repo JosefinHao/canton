@@ -2,7 +2,8 @@
 Canton Network Scan API Client
 
 A Python client for querying Canton Network on-chain data through the Scan API.
-Handles JWT authentication and provides methods for data retrieval and analysis.
+The Scan API is completely public - no authentication required!
+Provides methods for data retrieval and analysis.
 """
 
 import json
@@ -18,14 +19,14 @@ class CantonScanClient:
     """
     Client for interacting with Canton Network Scan API.
 
-    Handles authentication, request management, and data retrieval from
-    Canton Network's on-chain data API.
+    The Scan API is completely public and requires no authentication!
+    Simply provide the base URL and start querying on-chain data.
     """
 
     def __init__(
         self,
         base_url: str,
-        jwt_token: str,
+        jwt_token: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3
     ):
@@ -33,8 +34,8 @@ class CantonScanClient:
         Initialize the Canton Scan API client.
 
         Args:
-            base_url: Base URL of the Scan API (e.g., 'https://scan.example.com/api/v1')
-            jwt_token: JWT token with proper subject (ledgerApiUserId) and audience
+            base_url: Base URL of the Scan API (e.g., 'https://scan.canton.network/api/v1')
+            jwt_token: Optional JWT token (not required - Scan API is public)
             timeout: Request timeout in seconds (default: 30)
             max_retries: Maximum number of retry attempts (default: 3)
         """
@@ -55,11 +56,16 @@ class CantonScanClient:
         self.session.mount("https://", adapter)
 
         # Set default headers
-        self.session.headers.update({
-            'Authorization': f'Bearer {jwt_token}',
+        headers = {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
-        })
+        }
+
+        # Add authorization header only if token is provided
+        if jwt_token:
+            headers['Authorization'] = f'Bearer {jwt_token}'
+
+        self.session.headers.update(headers)
 
     def _make_request(
         self,
@@ -70,7 +76,7 @@ class CantonScanClient:
         json_data: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """
-        Make an authenticated request to the API.
+        Make a request to the API.
 
         Args:
             method: HTTP method (GET, POST, etc.)
