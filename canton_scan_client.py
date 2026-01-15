@@ -772,49 +772,20 @@ class SpliceScanClient:
 
     def health_check(self) -> bool:
         """
-        Check if the API is accessible.
+        Check if the API is accessible by calling a minimal endpoint.
+
+        Uses GET /v0/dso as a health check since there's no dedicated health endpoint
+        documented in the Splice Scan API specification.
 
         Returns:
             True if API is healthy, False otherwise
         """
         try:
-            self._make_request('GET', '/livez')
+            self._make_request('GET', '/v0/dso')
             return True
         except Exception as e:
             print(f"Health check failed: {e}")
             return False
-
-    def readiness_check(self) -> bool:
-        """
-        Check if the API is ready to serve requests.
-
-        Returns:
-            True if API is ready, False otherwise
-        """
-        try:
-            self._make_request('GET', '/readyz')
-            return True
-        except Exception as e:
-            print(f"Readiness check failed: {e}")
-            return False
-
-    def get_status(self) -> Dict[str, Any]:
-        """
-        Get API status information.
-
-        Returns:
-            Dictionary containing status information
-        """
-        return self._make_request('GET', '/status')
-
-    def get_version(self) -> Dict[str, Any]:
-        """
-        Get API version information.
-
-        Returns:
-            Dictionary containing version and commit_ts
-        """
-        return self._make_request('GET', '/version')
 
     # ========== Utility Methods ==========
 
