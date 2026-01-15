@@ -1,8 +1,8 @@
 """
-Basic Query Examples for Canton Network Scan API
+Basic Query Examples for Splice Network Scan API
 
-This script demonstrates basic usage of the Canton Scan API client
-to retrieve on-chain data.
+This script demonstrates basic usage of the Splice Scan API client
+to retrieve on-chain data from the Splice Network.
 
 The Scan API is completely PUBLIC - no authentication required!
 Just provide the API URL and start querying immediately.
@@ -10,24 +10,24 @@ Just provide the API URL and start querying immediately.
 
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # Add parent directory to path to import the client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from canton_scan_client import CantonScanClient
+from canton_scan_client import SpliceScanClient
 
 
 def main():
     """Run basic query examples."""
 
-    # Configuration - Replace with your actual Scan API URL
+    # Configuration - Replace with your actual Splice Scan API URL
     # No authentication required - the API is completely public!
-    BASE_URL = "https://scan.canton.network/api/v1"
+    BASE_URL = "https://scan.sv.splice.global/api/scan"
 
     # Initialize client - no authentication needed!
-    print("Initializing Canton Scan API client (no auth required!)...")
-    client = CantonScanClient(base_url=BASE_URL)
+    print("Initializing Splice Scan API client (no auth required!)...")
+    client = SpliceScanClient(base_url=BASE_URL)
 
     # Example 1: Health Check
     print("\n" + "="*60)
@@ -36,145 +36,159 @@ def main():
     is_healthy = client.health_check()
     print(f"API Health Status: {'OK' if is_healthy else 'FAILED'}")
 
-    # Example 2: Get Ledger Identity
+    # Example 2: Get DSO Information
     print("\n" + "="*60)
-    print("Example 2: Ledger Identity")
+    print("Example 2: DSO Information")
     print("="*60)
     try:
-        ledger_identity = client.get_ledger_identity()
-        print(f"Ledger Identity: {ledger_identity}")
+        dso = client.get_dso()
+        print(f"DSO Info: {dso}")
+
+        dso_party_id = client.get_dso_party_id()
+        print(f"DSO Party ID: {dso_party_id}")
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 3: Get Recent Transactions
+    # Example 3: Get Network Information
     print("\n" + "="*60)
-    print("Example 3: Recent Transactions (last 10)")
+    print("Example 3: Splice Network Names")
     print("="*60)
     try:
-        transactions = client.get_transactions(limit=10)
-        print(f"Retrieved {len(transactions.get('transactions', []))} transactions")
-
-        for i, tx in enumerate(transactions.get('transactions', [])[:3], 1):
-            print(f"\nTransaction {i}:")
-            print(f"  ID: {tx.get('transaction_id', 'N/A')}")
-            print(f"  Effective At: {tx.get('effective_at', 'N/A')}")
-            print(f"  Offset: {tx.get('offset', 'N/A')}")
-
+        names = client.get_splice_instance_names()
+        print(f"Network Names: {names}")
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 4: Get Active Contracts
+    # Example 4: Get ANS Entries
     print("\n" + "="*60)
-    print("Example 4: Active Contracts")
+    print("Example 4: ANS Entries (Amulet Name Service)")
     print("="*60)
     try:
-        contracts = client.get_active_contracts(limit=10)
-        print(f"Retrieved {len(contracts.get('contracts', []))} active contracts")
+        ans_entries = client.get_ans_entries(page_size=10)
+        print(f"Retrieved ANS entries")
 
-        for i, contract in enumerate(contracts.get('contracts', [])[:3], 1):
-            print(f"\nContract {i}:")
-            print(f"  ID: {contract.get('contract_id', 'N/A')}")
-            print(f"  Template: {contract.get('template_id', 'N/A')}")
-            print(f"  Created At: {contract.get('created_at', 'N/A')}")
+        for i, entry in enumerate(ans_entries.get('entries', [])[:5], 1):
+            print(f"\nANS Entry {i}:")
+            print(f"  Name: {entry.get('name', 'N/A')}")
+            print(f"  User: {entry.get('user', 'N/A')}")
+            print(f"  Expires At: {entry.get('expires_at', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 5: Get All Parties
+    # Example 5: Get Update History
     print("\n" + "="*60)
-    print("Example 5: All Parties")
+    print("Example 5: Recent Updates (Transaction History)")
     print("="*60)
     try:
-        parties = client.get_parties()
-        print(f"Total parties: {len(parties.get('parties', []))}")
+        updates = client.get_updates(page_size=10)
+        print(f"Retrieved {len(updates.get('updates', []))} updates")
 
-        for i, party in enumerate(parties.get('parties', [])[:5], 1):
-            print(f"\nParty {i}:")
-            print(f"  ID: {party.get('party_id', 'N/A')}")
-            print(f"  Display Name: {party.get('display_name', 'N/A')}")
+        for i, update in enumerate(updates.get('updates', [])[:3], 1):
+            print(f"\nUpdate {i}:")
+            print(f"  Record Time: {update.get('record_time', 'N/A')}")
+            print(f"  Migration ID: {update.get('migration_id', 'N/A')}")
+            print(f"  Update Type: {update.get('update', {}).get('type', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 6: Get Events
+    # Example 6: Get Validator Information
     print("\n" + "="*60)
-    print("Example 6: Recent Events")
+    print("Example 6: Validator Licenses")
     print("="*60)
     try:
-        events = client.get_events(limit=10)
-        print(f"Retrieved {len(events.get('events', []))} events")
+        validators = client.get_validator_licenses(limit=10)
+        print(f"Retrieved {len(validators.get('validators', []))} validators")
 
-        event_types = {}
-        for event in events.get('events', []):
-            event_type = event.get('event_type', 'unknown')
-            event_types[event_type] = event_types.get(event_type, 0) + 1
-
-        print("\nEvent Type Distribution:")
-        for event_type, count in event_types.items():
-            print(f"  {event_type}: {count}")
+        for i, validator in enumerate(validators.get('validators', [])[:3], 1):
+            print(f"\nValidator {i}:")
+            print(f"  Validator: {validator.get('validator', 'N/A')}")
+            print(f"  Sponsored: {validator.get('sponsored', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 7: Get Templates
+    # Example 7: Get Open Mining Rounds
     print("\n" + "="*60)
-    print("Example 7: Contract Templates")
+    print("Example 7: Open Mining Rounds")
     print("="*60)
     try:
-        templates = client.get_templates()
-        print(f"Total templates: {len(templates.get('templates', []))}")
+        rounds = client.get_open_and_issuing_mining_rounds()
+        print(f"Open Rounds: {len(rounds.get('open_mining_rounds', []))}")
+        print(f"Issuing Rounds: {len(rounds.get('issuing_rounds', []))}")
 
-        for i, template in enumerate(templates.get('templates', [])[:5], 1):
-            print(f"\nTemplate {i}:")
-            print(f"  ID: {template.get('template_id', 'N/A')}")
-            print(f"  Module: {template.get('module_name', 'N/A')}")
-            print(f"  Entity: {template.get('entity_name', 'N/A')}")
+        for i, round_data in enumerate(rounds.get('open_mining_rounds', [])[:2], 1):
+            print(f"\nOpen Round {i}:")
+            print(f"  Round Number: {round_data.get('payload', {}).get('round', {}).get('number', 'N/A')}")
+            print(f"  Opens At: {round_data.get('payload', {}).get('opensAt', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 8: Get Ledger Statistics
+    # Example 8: Get Closed Mining Rounds
     print("\n" + "="*60)
-    print("Example 8: Ledger Statistics")
+    print("Example 8: Closed Mining Rounds")
     print("="*60)
     try:
-        stats = client.get_ledger_stats()
-        print(f"Ledger Stats:")
-        for key, value in stats.items():
-            print(f"  {key}: {value}")
+        closed_rounds = client.get_closed_rounds()
+        print(f"Retrieved {len(closed_rounds.get('closed_rounds', []))} closed rounds")
+
+        for i, round_data in enumerate(closed_rounds.get('closed_rounds', [])[:2], 1):
+            print(f"\nClosed Round {i}:")
+            print(f"  Round: {round_data}")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 9: Time-based Query
+    # Example 9: Get Amulet Rules
     print("\n" + "="*60)
-    print("Example 9: Transactions from Last 24 Hours")
+    print("Example 9: Current Amulet Rules")
     print("="*60)
     try:
-        end_time = datetime.utcnow()
-        start_time = end_time - timedelta(days=1)
-
-        transactions = client.get_transactions(
-            start_time=start_time.isoformat() + 'Z',
-            end_time=end_time.isoformat() + 'Z',
-            limit=50
-        )
-
-        print(f"Transactions in last 24h: {len(transactions.get('transactions', []))}")
+        amulet_rules = client.get_amulet_rules()
+        print(f"Amulet Rules:")
+        for key, value in amulet_rules.items():
+            if key not in ['contract']:  # Skip large nested contract data
+                print(f"  {key}: {value}")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 10: Paginated Query
+    # Example 10: Get Featured App Rights
     print("\n" + "="*60)
-    print("Example 10: Paginated Transaction Retrieval")
+    print("Example 10: Featured App Rights")
     print("="*60)
     try:
-        all_transactions = client.get_all_transactions_paginated(
-            batch_size=50,
-            max_items=200
-        )
-        print(f"Retrieved {len(all_transactions)} transactions using pagination")
+        featured_apps = client.get_featured_app_rights()
+        print(f"Retrieved {len(featured_apps.get('app_rights', []))} featured apps")
+
+        for i, app in enumerate(featured_apps.get('app_rights', [])[:3], 1):
+            print(f"\nFeatured App {i}:")
+            print(f"  Provider: {app.get('provider', 'N/A')}")
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # Example 11: Get Total Amulet Balance
+    print("\n" + "="*60)
+    print("Example 11: Total Amulet Balance")
+    print("="*60)
+    try:
+        balance = client.get_total_amulet_balance(round_=0)
+        print(f"Total Amulet Balance:")
+        print(f"  {balance}")
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # Example 12: List Active Synchronizers
+    print("\n" + "="*60)
+    print("Example 12: Active Synchronizers")
+    print("="*60)
+    try:
+        synchronizers = client.list_activity(active_synchronizer_id="global-domain::1220...")
+        print(f"Synchronizer Activity: {synchronizers}")
 
     except Exception as e:
         print(f"Error: {e}")

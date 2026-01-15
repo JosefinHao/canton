@@ -1,34 +1,35 @@
-# Canton Network Scan API Client
+# Splice Network Scan API Client
 
-A comprehensive Python client for querying and analyzing on-chain data from the Canton Network using the Scan API.
+A comprehensive Python client for querying and analyzing on-chain data from the Splice Network using the Scan API.
 
 ## 🚀 Quick Start - No Authentication Required!
 
-**The Canton Network Scan API is completely PUBLIC** - you can start retrieving on-chain data immediately with zero authentication setup!
+**The Splice Network Scan API is completely PUBLIC** - you can start retrieving on-chain data immediately with zero authentication setup!
 
 ```python
-from canton_scan_client import CantonScanClient
+from canton_scan_client import SpliceScanClient
 
 # Initialize and start querying - that's it!
-client = CantonScanClient(base_url="https://scan.canton.network/api/v1")
-transactions = client.get_transactions(limit=10)
-print(f"Retrieved {len(transactions['transactions'])} transactions!")
+client = SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan")
+updates = client.get_updates(page_size=10)
+print(f"Retrieved {len(updates['updates'])} updates!")
 ```
 
 ## Overview
 
 This client provides an easy-to-use interface for:
-- Querying transactions, contracts, and events from the Canton ledger
-- Analyzing on-chain data patterns and trends
+- Querying updates (transactions), ANS entries, and amulet holdings from the Splice Network
+- Analyzing on-chain data patterns and trends for the Splice ecosystem
+- Tracking mining rounds, validators, and DSO information
 - Generating reports and visualizations
 - All **without any authentication required**!
 
 ## Features
 
 - **Zero Setup**: No authentication, tokens, or credentials required
-- **Full API Coverage**: Support for all major Scan API endpoints
+- **Full Splice API Coverage**: Support for all Splice Scan API endpoints
 - **Robust Error Handling**: Automatic retries and comprehensive error messages
-- **Data Analysis Tools**: Built-in analyzers for transaction volume, contract lifecycle, and party activity
+- **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, and ANS entries
 - **Visualization**: Generate charts and graphs from on-chain data
 - **Pagination Support**: Efficient retrieval of large datasets
 - **Type Hints**: Full type annotations for better IDE support
@@ -67,10 +68,10 @@ pip install requests urllib3
 
 ### API URL
 
-The Canton Network Scan API is publicly accessible at:
+The Splice Network Scan API is publicly accessible at:
 
 ```
-https://scan.canton.network/api/v1
+https://scan.sv.splice.global/api/scan
 ```
 
 Simply provide this URL when initializing the client - **no authentication required**!
@@ -81,7 +82,7 @@ You can optionally configure:
 
 ```yaml
 api:
-  base_url: "https://scan.canton.network/api/v1"
+  base_url: "https://scan.sv.splice.global/api/scan"
   timeout: 30  # Request timeout in seconds
   max_retries: 3  # Number of retry attempts
 ```
@@ -91,22 +92,26 @@ api:
 ### Basic Queries
 
 ```python
-from canton_scan_client import CantonScanClient
+from canton_scan_client import SpliceScanClient
 
 # Initialize client - no authentication needed!
-client = CantonScanClient(base_url="https://scan.canton.network/api/v1")
+client = SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan")
 
-# Get recent transactions
-transactions = client.get_transactions(limit=10)
-print(f"Retrieved {len(transactions['transactions'])} transactions")
+# Get DSO information
+dso = client.get_dso()
+print(f"DSO Info: {dso}")
 
-# Get active contracts
-contracts = client.get_active_contracts(limit=100)
-print(f"Found {len(contracts['contracts'])} active contracts")
+# Get recent updates (transaction history)
+updates = client.get_updates(page_size=10)
+print(f"Retrieved {len(updates['updates'])} updates")
 
-# Get all parties
-parties = client.get_parties()
-print(f"Total parties: {len(parties['parties'])}")
+# Get ANS entries
+ans_entries = client.get_ans_entries(page_size=10)
+print(f"Found {len(ans_entries['entries'])} ANS entries")
+
+# Get mining rounds
+rounds = client.get_open_and_issuing_mining_rounds()
+print(f"Open rounds: {len(rounds['open_mining_rounds'])}")
 
 # Close client when done
 client.close()
@@ -116,78 +121,71 @@ client.close()
 
 ```python
 # Recommended: use context manager for automatic cleanup
-with CantonScanClient(base_url="https://scan.canton.network/api/v1") as client:
+with SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan") as client:
     # Your queries here
-    transactions = client.get_transactions(limit=10)
+    updates = client.get_updates(page_size=10)
     # Client automatically closes when exiting the context
-```
-
-### Time-Based Queries
-
-```python
-from datetime import datetime, timedelta
-
-# Query transactions from last 24 hours
-end_time = datetime.utcnow()
-start_time = end_time - timedelta(days=1)
-
-transactions = client.get_transactions(
-    start_time=start_time.isoformat() + 'Z',
-    end_time=end_time.isoformat() + 'Z',
-    limit=100
-)
 ```
 
 ### Paginated Queries
 
 ```python
-# Retrieve all transactions using automatic pagination
-all_transactions = client.get_all_transactions_paginated(
-    batch_size=100,
-    max_items=1000  # Optional limit
-)
+# Retrieve updates using pagination
+after_migration_id = None
+after_record_time = None
+all_updates = []
 
-print(f"Retrieved {len(all_transactions)} total transactions")
+for page in range(10):
+    result = client.get_updates(
+        after_migration_id=after_migration_id,
+        after_record_time=after_record_time,
+        page_size=100
+    )
+
+    updates = result.get('updates', [])
+    if not updates:
+        break
+
+    all_updates.extend(updates)
+
+    # Get cursor for next page
+    if 'after' in result:
+        after_migration_id = result['after']['after_migration_id']
+        after_record_time = result['after']['after_record_time']
+    else:
+        break
+
+print(f"Retrieved {len(all_updates)} total updates")
 ```
 
 ### Data Analysis
 
 ```python
-from examples.data_analysis import CantonDataAnalyzer
+from examples.data_analysis import SpliceDataAnalyzer
 
 # Initialize analyzer
-analyzer = CantonDataAnalyzer(client)
+analyzer = SpliceDataAnalyzer(client)
 
-# Analyze transaction volume over time
-volume_df = analyzer.analyze_transaction_volume(days=7, granularity='hour')
+# Analyze update volume over time
+volume_df = analyzer.analyze_update_volume(max_pages=5, page_size=100)
 print(volume_df.describe())
 
-# Analyze contract lifecycle
-lifecycle = analyzer.analyze_contract_lifecycle()
-print(f"Active contracts: {lifecycle['active_contracts']}")
-print(f"Archival rate: {lifecycle['archival_rate']:.2%}")
+# Analyze mining rounds
+mining_stats = analyzer.analyze_mining_rounds()
+print(f"Open rounds: {mining_stats['open_rounds_count']}")
+print(f"Issuing rounds: {mining_stats['issuing_rounds_count']}")
 
-# Analyze template usage
-template_df = analyzer.analyze_template_usage()
-print(template_df.head(10))
+# Analyze ANS entries
+ans_df = analyzer.analyze_ans_entries()
+print(f"Total ANS entries: {len(ans_df)}")
+
+# Analyze validator activity
+validator_stats = analyzer.analyze_validator_activity()
+print(f"Total validators: {validator_stats['total_validators']}")
 
 # Generate comprehensive report
 report = analyzer.generate_summary_report()
 print(report)
-```
-
-### JWT Token Inspection (Optional)
-
-**Note:** JWT authentication is NOT required for the Scan API! However, if you're working with other Canton APIs that require authentication, the included JWT helper utilities can assist you:
-
-```python
-from examples.jwt_helper import inspect_jwt_token, validate_token_claims
-
-# Inspect a JWT token (for other Canton APIs that need auth)
-inspection = inspect_jwt_token(jwt_token)
-print(f"Subject: {inspection['subject']}")
-print(f"Audience: {inspection['audience']}")
-print(f"Expires at: {inspection['expiry']['expires_at']}")
 ```
 
 ## Example Scripts
@@ -201,10 +199,10 @@ cd examples
 python basic_queries.py
 ```
 
-The script uses the public API by default - just run it! You can optionally edit the `BASE_URL` if you're using a different Canton Network instance:
+The script uses the public API by default - just run it! You can optionally edit the `BASE_URL` if you're using a different Splice Network instance:
 
 ```python
-BASE_URL = "https://scan.canton.network/api/v1"  # Default public API
+BASE_URL = "https://scan.sv.splice.global/api/scan"  # Default public API
 ```
 
 ### Data Analysis Example
@@ -217,122 +215,159 @@ python data_analysis.py
 ```
 
 This will:
-- Generate a summary report
-- Analyze transaction volume and create visualizations
-- Analyze template usage patterns
-- Analyze party activity
+- Generate a summary report with DSO and network information
+- Analyze update volume and create visualizations
+- Analyze ANS entry patterns
+- Analyze mining rounds and validator activity
 - Export results to CSV files
-
-### JWT Token Helper
-
-Inspect and validate your JWT token:
-
-```bash
-cd examples
-python jwt_helper.py "your-jwt-token-here"
-```
 
 ## API Methods Reference
 
-### Transactions
+### DSO Queries
 
-- `get_transactions(limit, offset, start_time, end_time, party_id)` - Get transactions
-- `get_transaction_by_id(transaction_id)` - Get specific transaction
-- `get_transaction_tree(limit, offset, party_id)` - Get transaction trees
-- `get_all_transactions_paginated(batch_size, max_items, **kwargs)` - Get all transactions with pagination
+- `get_dso()` - Get DSO information
+- `get_dso_party_id()` - Get the party ID of the DSO
 
-### Contracts
+### Network Information
 
-- `get_active_contracts(template_id, limit, offset)` - Get active contracts
-- `get_contract_by_id(contract_id)` - Get specific contract
-- `search_contracts(query, limit)` - Search contracts with custom query
+- `get_splice_instance_names()` - Retrieve UI names of Splice network elements
 
-### Parties
+### Update History Queries
 
-- `get_parties()` - Get all parties
-- `get_party_by_id(party_id)` - Get specific party
+- `get_updates(after_migration_id, after_record_time, page_size, daml_value_encoding)` - Get update history (recommended v2 endpoint)
+- `get_updates_with_migrated_id(after_migration_id, after_record_time, page_size)` - Get updates with migrated ID
 
-### Events
+### ACS/State Queries
 
-- `get_events(event_type, limit, offset, start_time, end_time)` - Get events
+- `get_acs(migration_id, record_time, record_time_match, after, page_size, party_ids, templates)` - Get the ACS for a given migration id and record time
+- `get_acs_with_state(migration_id, record_time, templates, page_size)` - Get ACS with state information
 
-### Templates
+### Holdings Queries
 
-- `get_templates()` - Get all templates
-- `get_template_by_id(template_id)` - Get specific template
+- `get_holdings_state(migration_id, record_time, record_time_match, owner_party_ids, as_of_round)` - Get amulet holdings state
+- `get_holdings_summary(migration_id, record_time, record_time_match, owner_party_ids, as_of_round)` - Get aggregated amulet holdings summary
+- `get_total_amulet_balance(round_)` - Get total amulet balance across all users
 
-### Statistics
+### ANS Queries
 
-- `get_ledger_stats()` - Get overall ledger statistics
-- `get_party_stats(party_id)` - Get party-specific statistics
-- `get_template_stats(template_id)` - Get template-specific statistics
+- `get_ans_entries(page_size, name_prefix)` - List all non-expired ANS entries
+- `lookup_ans_entry_by_party(party_id)` - Lookup ANS entry by party ID
+- `lookup_ans_entry_by_name(name)` - Lookup ANS entry by name
+
+### Mining Rounds
+
+- `get_open_and_issuing_mining_rounds(cached_open_mining_round_contract_ids, cached_issuing_round_contract_ids)` - Get all current open and issuing mining rounds
+- `get_closed_rounds()` - Get closed mining rounds still in post-close process
+
+### Validator Queries
+
+- `get_validator_faucets(validator_ids)` - Get validator liveness statistics
+- `get_validator_licenses(after, limit)` - List all validators currently approved by DSO
+- `get_validator_rights(limit)` - List validator right contracts
+- `get_validator_onboarding_by_secret(secret)` - Lookup validator onboarding by secret
+
+### Transfer Queries
+
+- `get_transfer_preapproval_by_party(party)` - Lookup TransferPreapproval by receiver party
+- `get_accepted_transfer_offers_by_party(party)` - Lookup accepted transfer offers for a party
+
+### Event Queries
+
+- `get_events(after_migration_id, after_record_time, page_size, daml_value_encoding)` - Get event history in ascending order, paged
+
+### Domain/Synchronizer Queries
+
+- `list_activity(active_synchronizer_id)` - List activity for a synchronizer
+- `get_domain_id()` - Get the domain ID
+
+### Amulet Configuration
+
+- `get_amulet_rules()` - Get current amulet rules configuration
+- `get_amulet_config_for_round(round_)` - Get amulet configuration for specific round
+
+### Featured Apps
+
+- `get_featured_app_rights()` - List featured app rights
+
+### Votes
+
+- `list_vote_requests(actionName, accepted, requester, effectiveFrom, effectiveTo, limit)` - List all current vote requests
+- `list_vote_request_by_tracking_cid(trackingCid)` - Lookup vote request by tracking contract ID
+- `list_vote_results_by_tracking_cid(trackingCid)` - List votes for a request
 
 ### Utility
 
-- `get_ledger_time()` - Get current ledger time
-- `get_ledger_identity()` - Get ledger identity
-- `health_check()` - Check API health
+- `health_check()` - Check if API is accessible
+- `get_readiness()` - Check API readiness
 
 ## Data Analysis Features
 
-### CantonDataAnalyzer
+### SpliceDataAnalyzer
 
 The analyzer provides several methods for analyzing on-chain data:
 
-#### Transaction Volume Analysis
+#### Update Volume Analysis
 
 ```python
-volume_df = analyzer.analyze_transaction_volume(days=7, granularity='hour')
+volume_df = analyzer.analyze_update_volume(max_pages=10, page_size=100)
 ```
 
-Returns a pandas DataFrame with transaction counts over time.
+Returns a pandas DataFrame with update counts over time.
 
-#### Contract Lifecycle Analysis
+#### Mining Round Analysis
 
 ```python
-lifecycle = analyzer.analyze_contract_lifecycle(template_id=None)
+mining_stats = analyzer.analyze_mining_rounds()
 ```
 
-Returns statistics about contract creation, archival, and active contracts.
+Returns statistics about open, issuing, and closed mining rounds.
 
-#### Party Activity Analysis
+#### ANS Entry Analysis
 
 ```python
-party_df = analyzer.analyze_party_activity()
+ans_df = analyzer.analyze_ans_entries()
 ```
 
-Returns a DataFrame with activity metrics for each party.
+Returns a DataFrame with ANS entry statistics including expiration information.
 
-#### Template Usage Analysis
+#### Validator Activity Analysis
 
 ```python
-template_df = analyzer.analyze_template_usage()
+validator_stats = analyzer.analyze_validator_activity()
 ```
 
-Returns a DataFrame with usage statistics for each template.
+Returns statistics about validator licensing and sponsorship.
+
+#### Holdings Analysis
+
+```python
+holdings = analyzer.analyze_holdings_summary(migration_id=0, record_time="2025-01-01T00:00:00Z")
+```
+
+Returns amulet holdings statistics at a specific point in time.
 
 #### Visualization
 
 ```python
-# Create transaction volume plot
-analyzer.create_transaction_volume_plot(volume_df, 'output.png')
+# Create update volume plot
+analyzer.create_update_volume_plot(volume_df, 'output.png')
 
-# Create template usage plot
-analyzer.create_template_usage_plot(template_df, 'output.png')
+# Create ANS analysis plots
+analyzer.create_ans_analysis_plot(ans_df, 'output.png')
 ```
 
 ## Project Structure
 
 ```
 canton/
-├── canton_scan_client.py      # Main API client
+├── canton_scan_client.py      # Main Splice API client
 ├── config_example.yaml         # Configuration template
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
 └── examples/
     ├── basic_queries.py        # Basic query examples
     ├── data_analysis.py        # Data analysis examples
-    └── jwt_helper.py           # JWT token utilities
+    └── jwt_helper.py           # JWT token utilities (for other APIs)
 ```
 
 ## Error Handling
@@ -341,7 +376,7 @@ The client includes comprehensive error handling:
 
 ```python
 try:
-    transactions = client.get_transactions(limit=10)
+    updates = client.get_updates(page_size=10)
 except requests.exceptions.HTTPError as e:
     print(f"HTTP Error: {e}")
     print(f"Response: {e.response.text}")
@@ -353,19 +388,20 @@ except requests.exceptions.RequestException as e:
 
 1. **Use Context Managers**: Always use the client as a context manager to ensure proper cleanup:
    ```python
-   with CantonScanClient(base_url="https://scan.canton.network/api/v1") as client:
+   with SpliceScanClient(base_url="https://scan.sv.splice.global/api/scan") as client:
        # Your code here
    ```
 
-2. **Use Pagination**: For large datasets, use pagination methods to avoid memory issues:
+2. **Use Pagination**: For large datasets, use pagination to avoid memory issues:
    ```python
-   all_data = client.get_all_transactions_paginated(batch_size=100)
+   # Fetch updates in pages
+   result = client.get_updates(page_size=100, after_migration_id=prev_id, after_record_time=prev_time)
    ```
 
 3. **Handle Errors**: Always wrap API calls in try-except blocks for production use:
    ```python
    try:
-       transactions = client.get_transactions(limit=10)
+       updates = client.get_updates(page_size=10)
    except Exception as e:
        print(f"Error: {e}")
    ```
@@ -378,17 +414,17 @@ except requests.exceptions.RequestException as e:
 
 ### Connection Errors
 
-- Verify the base URL is correct: `https://scan.canton.network/api/v1`
+- Verify the base URL is correct: `https://scan.sv.splice.global/api/scan`
 - Check network connectivity
 - Verify firewall rules allow outbound HTTPS connections
 - Ensure DNS resolution is working
 
 ### Empty Results
 
-- Check that the ledger has data in the queried time range
+- Check that the Splice Network has data in the queried time range
 - Try querying without filters first to see if any data is available
 - Verify you're using the correct API endpoint
-- Check the API documentation for supported parameters
+- Check the official Splice API documentation for supported parameters
 
 ## Contributing
 
@@ -408,19 +444,31 @@ Contributions are welcome! Please follow these guidelines:
 
 For issues and questions:
 
-- Canton Network Documentation: https://docs.dev.sync.global/
+- Splice Network Documentation: https://docs.splice.global/
 - GitHub Issues: [Add your repository URL]
 - Email: [Add support email]
 
 ## Changelog
 
-### Version 1.0.0 (2026-01-15)
+### Version 2.0.0 (2026-01-15)
 
-- Initial release
-- Full Scan API coverage (completely public - no authentication required!)
-- Zero-setup instant access to on-chain data
-- Optional JWT authentication support for other Canton APIs
-- Data analysis tools with pandas integration
-- Visualization capabilities with matplotlib/seaborn
-- Comprehensive examples and documentation
-- Context manager support for easy resource management
+- **BREAKING CHANGE**: Complete rewrite to support Splice Network Scan API
+- Changed from `CantonScanClient` to `SpliceScanClient`
+- Replaced generic Canton ledger methods with Splice-specific endpoints
+- Added support for:
+  - DSO queries
+  - ANS (Amulet Name Service) entries
+  - Mining rounds (open, issuing, closed)
+  - Amulet holdings and balances
+  - Validator faucets and licenses
+  - Transfer preapprovals
+  - Featured app rights
+  - Vote requests and results
+  - Splice-specific network configuration
+- Updated all examples to use new Splice API methods
+- Updated data analyzer to work with Splice data structures
+- API still completely public - no authentication required!
+
+### Version 1.0.0
+
+- Initial release with generic Canton Scan API support

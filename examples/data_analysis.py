@@ -1,8 +1,8 @@
 """
-Data Analysis Examples for Canton Network On-Chain Data
+Data Analysis Examples for Splice Network On-Chain Data
 
 This script demonstrates how to analyze on-chain data retrieved from
-the Canton Network Scan API using pandas and visualization libraries.
+the Splice Network Scan API using pandas and visualization libraries.
 
 The Scan API is completely PUBLIC - no authentication required!
 Just provide the API URL and start analyzing on-chain data immediately.
@@ -11,13 +11,13 @@ Just provide the API URL and start analyzing on-chain data immediately.
 import sys
 import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from collections import Counter, defaultdict
 
 # Add parent directory to path to import the client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from canton_scan_client import CantonScanClient
+from canton_scan_client import SpliceScanClient
 
 try:
     import pandas as pd
@@ -30,231 +30,264 @@ except ImportError:
     print("Install with: pip install pandas matplotlib seaborn")
 
 
-class CantonDataAnalyzer:
-    """Analyzer for Canton Network on-chain data."""
+class SpliceDataAnalyzer:
+    """Analyzer for Splice Network on-chain data."""
 
-    def __init__(self, client: CantonScanClient):
+    def __init__(self, client: SpliceScanClient):
         """
         Initialize the analyzer.
 
         Args:
-            client: Initialized Canton Scan API client
+            client: Initialized Splice Scan API client
         """
         self.client = client
 
-    def analyze_transaction_volume(
+    def analyze_update_volume(
         self,
-        days: int = 7,
-        granularity: str = 'hour'
+        max_pages: int = 10,
+        page_size: int = 100
     ) -> pd.DataFrame:
         """
-        Analyze transaction volume over time.
+        Analyze update (transaction) volume over time.
 
         Args:
-            days: Number of days to analyze
-            granularity: Time granularity ('hour', 'day')
+            max_pages: Maximum number of pages to fetch
+            page_size: Number of updates per page
 
         Returns:
-            DataFrame with transaction volume analysis
+            DataFrame with update volume analysis
         """
         if not ANALYSIS_AVAILABLE:
             raise ImportError("Pandas required for analysis")
 
-        end_time = datetime.utcnow()
-        start_time = end_time - timedelta(days=days)
+        print(f"Fetching updates (max {max_pages} pages)...")
 
-        print(f"Fetching transactions from {start_time} to {end_time}...")
+        all_updates = []
+        after_migration_id = None
+        after_record_time = None
 
-        # Fetch all transactions in the time range
-        transactions = self.client.get_all_transactions_paginated(
-            batch_size=100,
-            start_time=start_time.isoformat() + 'Z',
-            end_time=end_time.isoformat() + 'Z'
-        )
+        for page in range(max_pages):
+            try:
+                result = self.client.get_updates(
+                    after_migration_id=after_migration_id,
+                    after_record_time=after_record_time,
+                    page_size=page_size
+                )
 
-        if not transactions:
-            print("No transactions found in the specified time range")
+                updates = result.get('updates', [])
+                if not updates:
+                    break
+
+                all_updates.extend(updates)
+
+                # Get cursor for next page
+                if 'after' in result:
+                    after_migration_id = result['after'].get('after_migration_id')
+                    after_record_time = result['after'].get('after_record_time')
+                else:
+                    break
+
+                print(f"  Fetched page {page + 1}: {len(updates)} updates")
+
+            except Exception as e:
+                print(f"  Error fetching page {page + 1}: {e}")
+                break
+
+        if not all_updates:
+            print("No updates found")
             return pd.DataFrame()
 
         # Convert to DataFrame
-        df = pd.DataFrame(transactions)
+        df = pd.DataFrame(all_updates)
 
         # Parse timestamps
-        df['timestamp'] = pd.to_datetime(df['effective_at'])
+        df['timestamp'] = pd.to_datetime(df['record_time'])
         df['date'] = df['timestamp'].dt.date
+        df['hour'] = df['timestamp'].dt.floor('H')
 
-        if granularity == 'hour':
-            df['time_bucket'] = df['timestamp'].dt.floor('H')
-        else:
-            df['time_bucket'] = df['timestamp'].dt.floor('D')
-
-        # Calculate volume
-        volume_df = df.groupby('time_bucket').agg({
-            'transaction_id': 'count'
-        }).rename(columns={'transaction_id': 'transaction_count'})
+        # Calculate volume by hour
+        volume_df = df.groupby('hour').agg({
+            'migration_id': 'count'
+        }).rename(columns={'migration_id': 'update_count'})
 
         return volume_df
 
-    def analyze_contract_lifecycle(
-        self,
-        template_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+    def analyze_mining_rounds(self) -> Dict[str, Any]:
         """
-        Analyze contract creation and archival patterns.
-
-        Args:
-            template_id: Optionally filter by template ID
+        Analyze mining round statistics.
 
         Returns:
-            Dictionary with lifecycle analysis
+            Dictionary with mining round analysis
         """
-        print("Fetching events...")
+        print("Fetching mining round data...")
 
-        # Fetch creation and archival events
-        created_events = self.client.get_events(
-            event_type='created',
-            limit=1000
-        )
+        try:
+            # Get open and issuing rounds
+            open_issuing = self.client.get_open_and_issuing_mining_rounds()
+            open_rounds = open_issuing.get('open_mining_rounds', [])
+            issuing_rounds = open_issuing.get('issuing_rounds', [])
 
-        archived_events = self.client.get_events(
-            event_type='archived',
-            limit=1000
-        )
+            # Get closed rounds
+            closed = self.client.get_closed_rounds()
+            closed_rounds = closed.get('closed_rounds', [])
 
-        created_count = len(created_events.get('events', []))
-        archived_count = len(archived_events.get('events', []))
+            analysis = {
+                'open_rounds_count': len(open_rounds),
+                'issuing_rounds_count': len(issuing_rounds),
+                'closed_rounds_count': len(closed_rounds),
+                'total_active_rounds': len(open_rounds) + len(issuing_rounds) + len(closed_rounds)
+            }
 
-        # Get active contracts
-        active_contracts = self.client.get_active_contracts(
-            template_id=template_id,
-            limit=1000
-        )
+            # Extract round numbers
+            if open_rounds:
+                round_numbers = [
+                    r.get('payload', {}).get('round', {}).get('number', 0)
+                    for r in open_rounds
+                ]
+                if round_numbers:
+                    analysis['latest_open_round'] = max(round_numbers)
 
-        active_count = len(active_contracts.get('contracts', []))
+            return analysis
 
-        analysis = {
-            'created_contracts': created_count,
-            'archived_contracts': archived_count,
-            'active_contracts': active_count,
-            'net_change': created_count - archived_count,
-            'archival_rate': archived_count / created_count if created_count > 0 else 0
-        }
+        except Exception as e:
+            print(f"Error analyzing mining rounds: {e}")
+            return {}
 
-        return analysis
-
-    def analyze_party_activity(self) -> pd.DataFrame:
+    def analyze_ans_entries(self) -> pd.DataFrame:
         """
-        Analyze activity levels by party.
+        Analyze ANS (Amulet Name Service) entry statistics.
 
         Returns:
-            DataFrame with party activity analysis
+            DataFrame with ANS entry analysis
         """
         if not ANALYSIS_AVAILABLE:
             raise ImportError("Pandas required for analysis")
 
-        print("Fetching party data...")
+        print("Fetching ANS entries...")
 
-        # Get all parties
-        parties_response = self.client.get_parties()
-        parties = parties_response.get('parties', [])
+        all_entries = []
+        max_pages = 10
 
-        party_stats = []
-
-        for party in parties:
-            party_id = party.get('party_id')
-            print(f"Analyzing party: {party_id}")
-
+        for page in range(max_pages):
             try:
-                # Get party statistics
-                stats = self.client.get_party_stats(party_id)
+                result = self.client.get_ans_entries(page_size=100)
+                entries = result.get('entries', [])
 
-                party_stats.append({
-                    'party_id': party_id,
-                    'display_name': party.get('display_name', party_id),
-                    **stats
-                })
+                if not entries:
+                    break
+
+                all_entries.extend(entries)
+                print(f"  Fetched page {page + 1}: {len(entries)} entries")
+
+                # Check if there are more pages
+                if len(entries) < 100:
+                    break
+
             except Exception as e:
-                print(f"  Error fetching stats for {party_id}: {e}")
-                party_stats.append({
-                    'party_id': party_id,
-                    'display_name': party.get('display_name', party_id),
-                    'error': str(e)
-                })
+                print(f"  Error fetching ANS entries: {e}")
+                break
 
-        return pd.DataFrame(party_stats)
+        if not all_entries:
+            print("No ANS entries found")
+            return pd.DataFrame()
 
-    def analyze_template_usage(self) -> pd.DataFrame:
-        """
-        Analyze usage patterns of different contract templates.
+        # Convert to DataFrame
+        df = pd.DataFrame(all_entries)
 
-        Returns:
-            DataFrame with template usage analysis
-        """
-        if not ANALYSIS_AVAILABLE:
-            raise ImportError("Pandas required for analysis")
-
-        print("Fetching template data...")
-
-        # Get all templates
-        templates_response = self.client.get_templates()
-        templates = templates_response.get('templates', [])
-
-        template_stats = []
-
-        for template in templates:
-            template_id = template.get('template_id')
-            print(f"Analyzing template: {template_id}")
-
-            try:
-                # Get active contracts for this template
-                contracts = self.client.get_active_contracts(
-                    template_id=template_id,
-                    limit=10000
-                )
-
-                # Get template statistics if available
-                try:
-                    stats = self.client.get_template_stats(template_id)
-                except:
-                    stats = {}
-
-                template_stats.append({
-                    'template_id': template_id,
-                    'module_name': template.get('module_name', 'N/A'),
-                    'entity_name': template.get('entity_name', 'N/A'),
-                    'active_contracts': len(contracts.get('contracts', [])),
-                    **stats
-                })
-            except Exception as e:
-                print(f"  Error analyzing {template_id}: {e}")
-
-        df = pd.DataFrame(template_stats)
-
-        if not df.empty and 'active_contracts' in df.columns:
-            df = df.sort_values('active_contracts', ascending=False)
+        # Parse expiration times if available
+        if 'expires_at' in df.columns:
+            df['expires_at_dt'] = pd.to_datetime(df['expires_at'], errors='coerce')
+            df['days_until_expiry'] = (df['expires_at_dt'] - pd.Timestamp.now()).dt.days
 
         return df
 
-    def create_transaction_volume_plot(
-        self,
-        volume_df: pd.DataFrame,
-        output_file: str = 'transaction_volume.png'
-    ):
+    def analyze_validator_activity(self) -> Dict[str, Any]:
         """
-        Create a plot of transaction volume over time.
+        Analyze validator activity and licensing.
+
+        Returns:
+            Dictionary with validator analysis
+        """
+        print("Fetching validator data...")
+
+        try:
+            # Get validator licenses
+            validators = self.client.get_validator_licenses(limit=1000)
+            validator_list = validators.get('validators', [])
+
+            analysis = {
+                'total_validators': len(validator_list),
+                'sponsored_count': sum(1 for v in validator_list if v.get('sponsored')),
+                'unsponsored_count': sum(1 for v in validator_list if not v.get('sponsored'))
+            }
+
+            return analysis
+
+        except Exception as e:
+            print(f"Error analyzing validators: {e}")
+            return {}
+
+    def analyze_holdings_summary(
+        self,
+        migration_id: int,
+        record_time: str
+    ) -> Dict[str, Any]:
+        """
+        Analyze amulet holdings at a specific point in time.
 
         Args:
-            volume_df: DataFrame from analyze_transaction_volume
+            migration_id: Migration ID for the snapshot
+            record_time: Record time for the snapshot
+
+        Returns:
+            Dictionary with holdings analysis
+        """
+        print(f"Fetching holdings summary at migration_id={migration_id}, record_time={record_time}...")
+
+        try:
+            holdings = self.client.get_holdings_summary(
+                migration_id=migration_id,
+                record_time=record_time
+            )
+
+            # Extract summary statistics
+            analysis = {
+                'total_holders': holdings.get('total_holders', 0),
+                'total_amulets': holdings.get('total_amulets', 0),
+                'total_locked_amulets': holdings.get('total_locked_amulets', 0),
+                'total_unlocked_amulets': holdings.get('total_unlocked_amulets', 0)
+            }
+
+            return analysis
+
+        except Exception as e:
+            print(f"Error analyzing holdings: {e}")
+            return {}
+
+    def create_update_volume_plot(
+        self,
+        volume_df: pd.DataFrame,
+        output_file: str = 'update_volume.png'
+    ):
+        """
+        Create a plot of update volume over time.
+
+        Args:
+            volume_df: DataFrame from analyze_update_volume
             output_file: Output file path for the plot
         """
         if not ANALYSIS_AVAILABLE:
             raise ImportError("Matplotlib required for plotting")
 
+        if volume_df.empty:
+            print("No data to plot")
+            return
+
         plt.figure(figsize=(12, 6))
-        plt.plot(volume_df.index, volume_df['transaction_count'], marker='o')
+        plt.plot(volume_df.index, volume_df['update_count'], marker='o')
         plt.xlabel('Time')
-        plt.ylabel('Transaction Count')
-        plt.title('Transaction Volume Over Time')
+        plt.ylabel('Update Count')
+        plt.title('Splice Network Update Volume Over Time')
         plt.xticks(rotation=45)
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
@@ -262,39 +295,43 @@ class CantonDataAnalyzer:
         print(f"Plot saved to {output_file}")
         plt.close()
 
-    def create_template_usage_plot(
+    def create_ans_analysis_plot(
         self,
-        template_df: pd.DataFrame,
-        output_file: str = 'template_usage.png'
+        ans_df: pd.DataFrame,
+        output_file: str = 'ans_analysis.png'
     ):
         """
-        Create a bar plot of template usage.
+        Create visualizations of ANS entry data.
 
         Args:
-            template_df: DataFrame from analyze_template_usage
+            ans_df: DataFrame from analyze_ans_entries
             output_file: Output file path for the plot
         """
         if not ANALYSIS_AVAILABLE:
             raise ImportError("Matplotlib required for plotting")
 
-        if template_df.empty or 'active_contracts' not in template_df.columns:
-            print("No data available for plotting")
+        if ans_df.empty or 'days_until_expiry' not in ans_df.columns:
+            print("No ANS data available for plotting")
             return
 
-        # Take top 10 templates
-        top_templates = template_df.head(10)
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-        plt.figure(figsize=(12, 6))
-        plt.bar(range(len(top_templates)), top_templates['active_contracts'])
-        plt.xlabel('Template')
-        plt.ylabel('Active Contracts')
-        plt.title('Top 10 Templates by Active Contracts')
-        plt.xticks(
-            range(len(top_templates)),
-            top_templates['entity_name'].tolist(),
-            rotation=45,
-            ha='right'
-        )
+        # Plot 1: Distribution of days until expiry
+        ans_df['days_until_expiry'].hist(bins=30, ax=ax1)
+        ax1.set_xlabel('Days Until Expiry')
+        ax1.set_ylabel('Number of Entries')
+        ax1.set_title('ANS Entry Expiration Distribution')
+        ax1.grid(True, alpha=0.3)
+
+        # Plot 2: Expiry timeline
+        expiry_counts = ans_df.groupby(ans_df['expires_at_dt'].dt.date).size()
+        ax2.plot(expiry_counts.index, expiry_counts.values, marker='o')
+        ax2.set_xlabel('Expiration Date')
+        ax2.set_ylabel('Number of Entries Expiring')
+        ax2.set_title('ANS Entry Expiration Timeline')
+        ax2.tick_params(axis='x', rotation=45)
+        ax2.grid(True, alpha=0.3)
+
         plt.tight_layout()
         plt.savefig(output_file, dpi=300)
         print(f"Plot saved to {output_file}")
@@ -302,58 +339,69 @@ class CantonDataAnalyzer:
 
     def generate_summary_report(self) -> str:
         """
-        Generate a comprehensive summary report of the ledger.
+        Generate a comprehensive summary report of the Splice Network.
 
         Returns:
             Formatted summary report as string
         """
         report = []
         report.append("=" * 70)
-        report.append("CANTON NETWORK ON-CHAIN DATA SUMMARY REPORT")
+        report.append("SPLICE NETWORK ON-CHAIN DATA SUMMARY REPORT")
         report.append("=" * 70)
         report.append(f"Generated at: {datetime.utcnow().isoformat()}")
         report.append("")
 
         try:
-            # Ledger Identity
-            identity = self.client.get_ledger_identity()
-            report.append("LEDGER IDENTITY")
+            # DSO Information
+            dso = self.client.get_dso()
+            report.append("DSO INFORMATION")
             report.append("-" * 70)
-            for key, value in identity.items():
+            for key, value in dso.items():
+                if not isinstance(value, dict):  # Skip nested objects
+                    report.append(f"  {key}: {value}")
+            report.append("")
+
+        except Exception as e:
+            report.append(f"Error fetching DSO info: {e}")
+            report.append("")
+
+        try:
+            # Network Names
+            names = self.client.get_splice_instance_names()
+            report.append("NETWORK CONFIGURATION")
+            report.append("-" * 70)
+            for key, value in names.items():
                 report.append(f"  {key}: {value}")
             report.append("")
 
         except Exception as e:
-            report.append(f"Error fetching ledger identity: {e}")
+            report.append(f"Error fetching network names: {e}")
             report.append("")
 
         try:
-            # Ledger Statistics
-            stats = self.client.get_ledger_stats()
-            report.append("LEDGER STATISTICS")
+            # Mining Rounds
+            mining_stats = self.analyze_mining_rounds()
+            report.append("MINING ROUNDS")
             report.append("-" * 70)
-            for key, value in stats.items():
+            for key, value in mining_stats.items():
                 report.append(f"  {key}: {value}")
             report.append("")
 
         except Exception as e:
-            report.append(f"Error fetching ledger stats: {e}")
+            report.append(f"Error analyzing mining rounds: {e}")
             report.append("")
 
         try:
-            # Contract Lifecycle
-            lifecycle = self.analyze_contract_lifecycle()
-            report.append("CONTRACT LIFECYCLE")
+            # Validator Activity
+            validator_stats = self.analyze_validator_activity()
+            report.append("VALIDATOR STATISTICS")
             report.append("-" * 70)
-            report.append(f"  Total Created: {lifecycle['created_contracts']}")
-            report.append(f"  Total Archived: {lifecycle['archived_contracts']}")
-            report.append(f"  Currently Active: {lifecycle['active_contracts']}")
-            report.append(f"  Net Change: {lifecycle['net_change']}")
-            report.append(f"  Archival Rate: {lifecycle['archival_rate']:.2%}")
+            for key, value in validator_stats.items():
+                report.append(f"  {key}: {value}")
             report.append("")
 
         except Exception as e:
-            report.append(f"Error analyzing contract lifecycle: {e}")
+            report.append(f"Error analyzing validators: {e}")
             report.append("")
 
         report.append("=" * 70)
@@ -364,16 +412,16 @@ class CantonDataAnalyzer:
 def main():
     """Run data analysis examples."""
 
-    # Configuration - Replace with your actual Scan API URL
+    # Configuration - Replace with your actual Splice Scan API URL
     # No authentication required - the API is completely public!
-    BASE_URL = "https://scan.canton.network/api/v1"
+    BASE_URL = "https://scan.sv.splice.global/api/scan"
 
     # Initialize client - no authentication needed!
-    print("Initializing Canton Scan API client (no auth required!)...")
-    client = CantonScanClient(base_url=BASE_URL)
+    print("Initializing Splice Scan API client (no auth required!)...")
+    client = SpliceScanClient(base_url=BASE_URL)
 
     # Initialize analyzer
-    analyzer = CantonDataAnalyzer(client)
+    analyzer = SpliceDataAnalyzer(client)
 
     # Generate summary report
     print("\n" + "=" * 70)
@@ -383,73 +431,92 @@ def main():
     print(report)
 
     # Save report to file
-    with open('canton_summary_report.txt', 'w') as f:
+    with open('splice_summary_report.txt', 'w') as f:
         f.write(report)
-    print("\nReport saved to canton_summary_report.txt")
+    print("\nReport saved to splice_summary_report.txt")
 
     if not ANALYSIS_AVAILABLE:
         print("\nSkipping advanced analytics (pandas/matplotlib not installed)")
+        client.close()
         return
 
-    # Analyze transaction volume
+    # Analyze update volume
     print("\n" + "=" * 70)
-    print("Analyzing Transaction Volume...")
+    print("Analyzing Update Volume...")
     print("=" * 70)
     try:
-        volume_df = analyzer.analyze_transaction_volume(days=7, granularity='hour')
+        volume_df = analyzer.analyze_update_volume(max_pages=5, page_size=100)
         if not volume_df.empty:
-            print("\nTransaction Volume Statistics:")
+            print("\nUpdate Volume Statistics:")
             print(volume_df.describe())
 
             # Create plot
-            analyzer.create_transaction_volume_plot(volume_df)
+            analyzer.create_update_volume_plot(volume_df)
 
             # Save to CSV
-            volume_df.to_csv('transaction_volume.csv')
-            print("Data saved to transaction_volume.csv")
+            volume_df.to_csv('update_volume.csv')
+            print("Data saved to update_volume.csv")
         else:
-            print("No transaction data available")
+            print("No update data available")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Analyze template usage
+    # Analyze ANS entries
     print("\n" + "=" * 70)
-    print("Analyzing Template Usage...")
+    print("Analyzing ANS Entries...")
     print("=" * 70)
     try:
-        template_df = analyzer.analyze_template_usage()
-        if not template_df.empty:
-            print("\nTop Templates by Active Contracts:")
-            print(template_df.head(10).to_string(index=False))
+        ans_df = analyzer.analyze_ans_entries()
+        if not ans_df.empty:
+            print(f"\nTotal ANS Entries: {len(ans_df)}")
 
-            # Create plot
-            analyzer.create_template_usage_plot(template_df)
+            if 'name' in ans_df.columns:
+                print(f"Sample ANS Names:")
+                for name in ans_df['name'].head(10):
+                    print(f"  - {name}")
+
+            # Create plots if expiry data available
+            if 'days_until_expiry' in ans_df.columns:
+                analyzer.create_ans_analysis_plot(ans_df)
 
             # Save to CSV
-            template_df.to_csv('template_usage.csv', index=False)
-            print("\nData saved to template_usage.csv")
+            ans_df.to_csv('ans_entries.csv', index=False)
+            print("\nData saved to ans_entries.csv")
         else:
-            print("No template data available")
+            print("No ANS entry data available")
 
     except Exception as e:
         print(f"Error: {e}")
 
-    # Analyze party activity
+    # Analyze mining rounds
     print("\n" + "=" * 70)
-    print("Analyzing Party Activity...")
+    print("Analyzing Mining Rounds...")
     print("=" * 70)
     try:
-        party_df = analyzer.analyze_party_activity()
-        if not party_df.empty:
-            print("\nParty Activity Summary:")
-            print(party_df.to_string(index=False))
-
-            # Save to CSV
-            party_df.to_csv('party_activity.csv', index=False)
-            print("\nData saved to party_activity.csv")
+        mining_stats = analyzer.analyze_mining_rounds()
+        if mining_stats:
+            print("\nMining Round Statistics:")
+            for key, value in mining_stats.items():
+                print(f"  {key}: {value}")
         else:
-            print("No party data available")
+            print("No mining round data available")
+
+    except Exception as e:
+        print(f"Error: {e}")
+
+    # Analyze validators
+    print("\n" + "=" * 70)
+    print("Analyzing Validators...")
+    print("=" * 70)
+    try:
+        validator_stats = analyzer.analyze_validator_activity()
+        if validator_stats:
+            print("\nValidator Statistics:")
+            for key, value in validator_stats.items():
+                print(f"  {key}: {value}")
+        else:
+            print("No validator data available")
 
     except Exception as e:
         print(f"Error: {e}")
