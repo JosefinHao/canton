@@ -234,7 +234,7 @@ This will:
 
 ### Update History Queries
 
-- `get_updates(after_migration_id, after_record_time, page_size, daml_value_encoding)` - Get update history (recommended v2 endpoint)
+- `get_updates(after_migration_id, after_record_time, page_size, daml_value_encoding)` - Get update history (v2 endpoint)
 - `get_updates_with_migrated_id(after_migration_id, after_record_time, page_size)` - Get updates with migrated ID
 
 ### ACS/State Queries
@@ -488,7 +488,7 @@ print(f"Diversity Score: {power_users['diversity_score']}/100")
 # Economic Health Assessment
 economic_insights = EconomicHealthInsights(client)
 velocity_analysis = economic_insights.analyze_token_velocity(updates, total_supply=1000000)
-print(f"Velocity Recommendations: {velocity_analysis['recommendations']}")
+print(f"Velocity Analysis: {velocity_analysis['interpretation']}")
 
 # Decentralization & Security
 decentral_insights = DecentralizationInsights(client)
@@ -516,13 +516,13 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 - Is the network growing sustainably? → Growth trajectory analysis
 - What's the 30/90/180-day outlook? → Growth projections
 - Is the network healthy overall? → Composite health score (0-100)
-- Where should we invest resources? → Risk assessments & recommendations
+- Resource allocation analysis → Risk assessments & classifications
 
 **For Network Operators:**
-- When should we scale infrastructure? → Peak hour analysis
-- Are we at risk from power users? → Concentration risk metrics
-- What's causing traffic spikes? → Anomaly detection with cause inference
-- Is decentralization improving? → Decentralization score tracking
+- Infrastructure scaling timing → Peak hour analysis
+- Power user concentration risk → Concentration risk metrics
+- Traffic spike analysis → Anomaly detection with cause inference
+- Decentralization status → Decentralization score tracking
 
 **For Token Economists:**
 - Is wealth concentrating dangerously? → Gini coefficient & inequality metrics
@@ -542,23 +542,23 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 - Is participation healthy? → Governance participation metrics
 - What does community want? → Priority inference from proposals
 
-### Actionable Outputs
+### Output Classifications
 
 **Risk Assessments**:
--  HIGH RISK /  MODERATE RISK /  LOW RISK classifications
-- Specific recommendations for each risk area
+- HIGH RISK / MODERATE RISK / LOW RISK classifications
 - Quantitative thresholds and scoring
+- Risk level determination
 
-**Growth Interpretations**:
--  EXCELLENT: Strong accelerating growth
--  GOOD: Positive growth trend
--  WATCH: Growth slowing, monitor closely
--  CRITICAL: Declining activity, action needed
+**Growth Classifications**:
+- EXCELLENT: Strong accelerating growth
+- GOOD: Positive growth trend
+- WATCH: Growth slowing
+- CRITICAL: Declining activity
 
-**Infrastructure Recommendations**:
-- Auto-scaling recommendations based on peak patterns
-- Resource allocation guidance
-- Cost optimization opportunities
+**Infrastructure Analysis**:
+- Peak pattern identification
+- Resource allocation metrics
+- Utilization patterns
 
 **Executive Visualizations**:
 - 6-panel executive dashboard (PNG export)

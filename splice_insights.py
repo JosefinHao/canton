@@ -152,15 +152,15 @@ class NetworkGrowthInsights:
     def _interpret_growth(self, acceleration: float, daily_rate: float) -> str:
         """Generate human-readable interpretation."""
         if daily_rate < 10:
-            return " CONCERN: Low activity levels. Network needs growth initiatives."
+            return " CONCERN: Low activity levels."
         elif acceleration > 10:
-            return " EXCELLENT: Strong accelerating growth. Network is scaling well."
+            return " EXCELLENT: Strong accelerating growth."
         elif acceleration > 0:
-            return " GOOD: Positive growth trend. Continue current strategies."
+            return " GOOD: Positive growth trend."
         elif acceleration > -10:
-            return " WATCH: Growth slowing. Monitor closely and consider interventions."
+            return " WATCH: Growth slowing."
         else:
-            return " CRITICAL: Declining activity. Immediate action needed."
+            return " CRITICAL: Declining activity."
 
     def detect_viral_events(
         self,
@@ -170,7 +170,7 @@ class NetworkGrowthInsights:
         """
         Detect viral events or anomalous activity spikes.
 
-        INSIGHT: What caused traffic spikes? New features? Marketing? Attacks?
+        Identifies traffic spikes and provides severity classification.
 
         Args:
             updates: List of update records
@@ -281,23 +281,23 @@ class UserBehaviorInsights:
         }
 
     def _infrastructure_recommendation(self, peak_hour: int, hourly_counts) -> str:
-        """Recommend infrastructure optimization."""
+        """Describe infrastructure patterns."""
         total = hourly_counts.sum()
         peak_pct = (hourly_counts[peak_hour] / total * 100) if total > 0 else 0
 
         if peak_pct > 20:
-            return f" High concentration at {peak_hour}:00 UTC ({peak_pct:.1f}%). Consider auto-scaling during peak hours."
+            return f"High concentration at {peak_hour}:00 UTC ({peak_pct:.1f}%)."
         else:
-            return " Activity is well-distributed. Current infrastructure likely sufficient."
+            return "Activity is well-distributed across hours."
 
     def _user_pattern_interpretation(self, weekend_pct: float) -> str:
         """Interpret user behavior patterns."""
         if weekend_pct > 50:
-            return " Casual/consumer user base (weekend heavy). Focus on user experience and engagement."
+            return "Casual/consumer user base (weekend heavy)."
         elif weekend_pct < 30:
-            return " Professional/developer user base (weekday heavy). Focus on tools and APIs."
+            return "Professional/developer user base (weekday heavy)."
         else:
-            return "⚖️ Balanced user base. Maintain broad appeal."
+            return "Balanced user base across weekdays and weekends."
 
     def analyze_power_users(
         self,
@@ -305,9 +305,9 @@ class UserBehaviorInsights:
         top_n: int = 20
     ) -> Dict[str, Any]:
         """
-        Identify power users and their behavior.
+        Identify power users and their behavior patterns.
 
-        INSIGHT: Who are the most active users? Are we dependent on them?
+        Analyzes user activity concentration and distribution.
 
         Args:
             updates: List of update records
@@ -367,13 +367,13 @@ class UserBehaviorInsights:
     def _assess_concentration_risk(self, concentration_pct: float, gini: float) -> str:
         """Assess risk of user concentration."""
         if concentration_pct > 70:
-            return " HIGH RISK: Network depends heavily on few users. Diversification critical."
+            return "HIGH RISK: Network depends heavily on few users."
         elif concentration_pct > 50:
-            return " MODERATE RISK: Some concentration. Work on user acquisition."
+            return "MODERATE RISK: Some concentration detected."
         elif gini > 0.7:
-            return " WATCH: Activity inequality high. Monitor top user retention."
+            return "WATCH: Activity inequality high."
         else:
-            return " LOW RISK: Good user diversity. Healthy distribution."
+            return "LOW RISK: User diversity is high."
 
 
 # ========== Economic Health Insights ==========
@@ -410,21 +410,15 @@ class EconomicHealthInsights:
             'note': 'Wealth distribution analysis framework',
             'metrics_to_track': {
                 'gini_coefficient': 'Measure inequality (0=equal, 1=unequal)',
-                'top_1_pct_holdings': 'What % of wealth do top 1% control?',
-                'top_10_pct_holdings': 'What % of wealth do top 10% control?',
-                'median_vs_mean_ratio': 'Ratio < 1 indicates right skew (few wealthy)',
+                'top_1_pct_holdings': 'Percentage of wealth controlled by top 1%',
+                'top_10_pct_holdings': 'Percentage of wealth controlled by top 10%',
+                'median_vs_mean_ratio': 'Ratio < 1 indicates right skew',
                 'herfindahl_index': 'Market concentration index'
             },
             'target_ranges': {
-                'gini_coefficient': '<0.5 is healthy, >0.7 is concerning',
-                'top_10_pct_holdings': '<50% is healthy, >70% is concerning'
-            },
-            'recommendations': [
-                'Track Gini coefficient trend over time',
-                'Monitor whale wallet accumulation',
-                'Consider token distribution mechanisms if concentration high',
-                'Implement progressive fee structures if needed'
-            ]
+                'gini_coefficient': '<0.5, 0.5-0.7, >0.7',
+                'top_10_pct_holdings': '<50%, 50-70%, >70%'
+            }
         }
 
     def analyze_token_velocity(
@@ -455,31 +449,13 @@ class EconomicHealthInsights:
         return {
             'velocity_estimate': velocity,
             'interpretation': {
-                'very_high_velocity': '>10: Excessive speculation, low utility retention',
-                'high_velocity': '5-10: Active usage, possible speculation',
-                'healthy_velocity': '2-5: Good balance of holding and transacting',
-                'low_velocity': '0.5-2: Conservative, may indicate low utility',
-                'very_low_velocity': '<0.5: Hoarding, network underutilized'
-            },
-            'recommendations': self._velocity_recommendations(velocity.get('velocity_estimate', 0))
+                'very_high_velocity': '>10: Excessive speculation',
+                'high_velocity': '5-10: Active usage',
+                'healthy_velocity': '2-5: Balanced holding and transacting',
+                'low_velocity': '0.5-2: Conservative holding',
+                'very_low_velocity': '<0.5: Hoarding pattern'
+            }
         }
-
-    def _velocity_recommendations(self, velocity: float) -> List[str]:
-        """Recommend actions based on velocity."""
-        if velocity > 10:
-            return [
-                "Consider mechanisms to encourage holding (staking, governance)",
-                "Investigate if speculation is crowding out utility",
-                "May need to increase utility value proposition"
-            ]
-        elif velocity < 0.5:
-            return [
-                "Incentivize usage and transactions",
-                "Ensure sufficient liquidity",
-                "May indicate insufficient utility - add use cases"
-            ]
-        else:
-            return ["Velocity appears healthy. Continue monitoring."]
 
 
 # ========== Validator Network & Decentralization Insights ==========
@@ -533,7 +509,6 @@ class DecentralizationInsights:
                 'LOW'
             ),
             'security_assessment': self._security_assessment(total_validators, nakamoto_estimate),
-            'recommendations': self._decentralization_recommendations(total_validators),
             'metrics_to_monitor': {
                 'validator_count_trend': 'Growing or shrinking?',
                 'validator_churn_rate': 'Are validators leaving?',
@@ -545,36 +520,11 @@ class DecentralizationInsights:
     def _security_assessment(self, validator_count: int, nakamoto: int) -> str:
         """Assess security based on validator count."""
         if validator_count < 10:
-            return f" HIGH RISK: Only {validator_count} validators. Network vulnerable to collusion. Nakamoto coefficient: {nakamoto}"
+            return f"HIGH RISK: {validator_count} validators. Network vulnerable to collusion. Nakamoto coefficient: {nakamoto}"
         elif validator_count < 50:
-            return f" MODERATE RISK: {validator_count} validators. Acceptable but should grow. Nakamoto coefficient: {nakamoto}"
+            return f"MODERATE RISK: {validator_count} validators. Nakamoto coefficient: {nakamoto}"
         else:
-            return f" GOOD: {validator_count} validators. Strong decentralization. Nakamoto coefficient: {nakamoto}"
-
-    def _decentralization_recommendations(self, validator_count: int) -> List[str]:
-        """Recommend actions to improve decentralization."""
-        if validator_count < 10:
-            return [
-                "URGENT: Recruit more validators",
-                "Consider validator incentive programs",
-                "Lower barriers to entry if too high",
-                "Ensure geographic diversity"
-            ]
-        elif validator_count < 50:
-            return [
-                "Continue validator growth initiatives",
-                "Monitor validator health and uptime",
-                "Encourage independent operators",
-                "Track geographic distribution"
-            ]
-        else:
-            return [
-                "Maintain current validator count",
-                "Focus on quality over quantity",
-                "Monitor for entity concentration",
-                "Ensure reward distribution fairness"
-            ]
-
+            return f"GOOD: {validator_count} validators. Strong decentralization. Nakamoto coefficient: {nakamoto}"
 
 # ========== Governance Effectiveness Insights ==========
 
@@ -634,19 +584,19 @@ class GovernanceInsights:
         insights = []
 
         if acceptance_rate < 20:
-            insights.append(" Very low acceptance rate. Proposals may not align with community needs.")
+            insights.append("Very low acceptance rate detected.")
         elif acceptance_rate > 80:
-            insights.append(" Very high acceptance rate. May indicate rubber-stamping or lack of scrutiny.")
+            insights.append("Very high acceptance rate detected.")
         else:
-            insights.append(" Healthy acceptance rate. Good balance of approval/rejection.")
+            insights.append("Balanced acceptance rate.")
 
         votes_per_validator = participation.get('votes_per_validator', 0)
         if votes_per_validator < 0.05:
-            insights.append(" Low participation. Validators not engaging in governance.")
+            insights.append("Low participation rate.")
         elif votes_per_validator < 0.2:
-            insights.append(" Moderate participation. Room for improvement.")
+            insights.append("Moderate participation rate.")
         else:
-            insights.append(" Good participation levels.")
+            insights.append("High participation rate.")
 
         return insights
 

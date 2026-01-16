@@ -42,7 +42,6 @@ This makes on-chain analytics **more powerful than traditional business intellig
  CRITICAL: Declining activity. Immediate action needed.
 ```
 
-**Example Decision**: If growth is decelerating, you know to launch user acquisition campaigns NOW, not in 3 months.
 
 ---
 
@@ -63,7 +62,7 @@ This makes on-chain analytics **more powerful than traditional business intellig
 ```
 Peak Hour: 14:00 UTC (28.3% of activity)
 → Infrastructure Insight: High concentration at 14:00 UTC.
-  Consider auto-scaling during peak hours.
+  Auto-scaling pattern detected.
 
 Weekend Activity: 62% of traffic
 → User Pattern: Casual/consumer user base. Focus on UX and engagement.
@@ -72,7 +71,6 @@ Power User Risk:  HIGH RISK
 → Top 10 users = 68% of activity. Network vulnerable to churn.
 ```
 
-**Example Decision**: If 1 PM UTC has 30% of traffic, auto-scale servers 12:45-2 PM and save on 24/7 over-provisioning.
 
 ---
 
@@ -108,7 +106,6 @@ Power User Risk:  HIGH RISK
 - **0.4-0.5**: Acceptable (like most developed nations)
 - **> 0.7**: Extreme inequality (warning sign)
 
-**Example Decision**: If Gini > 0.7 and rising, implement progressive fees or token distribution mechanisms to prevent plutocracy.
 
 ---
 
@@ -128,7 +125,7 @@ Power User Risk:  HIGH RISK
 #### Critical Thresholds:
 ```
 Validators < 10:  HIGH RISK - Vulnerable to collusion
-Validators 10-50:  MODERATE RISK - Acceptable but should grow
+Validators 10-50:  MODERATE RISK - Acceptable range
 Validators > 50:  LOW RISK - Strong decentralization
 
 Nakamoto Coefficient < 5: Critical vulnerability
@@ -146,12 +143,11 @@ Need 3 validators to compromise (33% attack).
 
 Recommendations:
 1. URGENT: Recruit more validators
-2. Consider validator incentive programs
+2. Validator incentive programs
 3. Lower barriers to entry if too high
 4. Ensure geographic diversity
 ```
 
-**Example Decision**: If Nakamoto coefficient is 3, prioritize validator recruitment over all other initiatives. Network security depends on it.
 
 ---
 
@@ -185,7 +181,6 @@ Most Common Proposals: Config changes (45%), Upgrades (30%)
 → Community Priority: Protocol parameters and technical improvements
 ```
 
-**Example Decision**: If acceptance is 15%, hold community calls to understand objections before submitting more proposals.
 
 ---
 
@@ -219,7 +214,6 @@ Spike Detected:
   Action Required: Investigate immediately
 ```
 
-**Example Decision**: 12x spike? Check if it's organic (new partnership announced) or malicious (spam attack). Act accordingly.
 
 ---
 
@@ -402,73 +396,7 @@ Run this daily via cron: `0 9 * * * /path/to/daily_check.py`
 
 ---
 
-##  Best Practices
 
-### 1. **Trend Over Absolute Numbers**
-Don't fixate on "we have 1,000 transactions/day". Focus on: "Is 1,000/day growing or shrinking?"
 
-### 2. **Context Matters**
-A Gini of 0.7 might be acceptable for a new network (early adopters), concerning for a mature one.
 
-### 3. **Multiple Indicators**
-Don't rely on one metric. High transaction count with low unique users = bot activity, not growth.
-
-### 4. **Act on Thresholds**
-Define action thresholds ahead of time:
-- If Nakamoto coefficient < 5 → Launch validator recruitment
-- If growth < 0 for 2 weeks → Review product strategy
-- If Gini > 0.75 → Implement redistribution
-
-### 5. **Automate Monitoring**
-Set up daily scripts. Don't rely on manual checks. By the time you manually notice a problem, it's often too late.
-
----
-
-##  Next Steps
-
-### For Immediate Use:
-1. Run `python splice_insights.py` to generate executive dashboard
-2. Review the 6-panel visualization
-3. Identify your biggest risk area (growth/security/economics)
-4. Take one action this week to address it
-
-### For Long-Term Strategy:
-1. Set up daily monitoring script
-2. Define alert thresholds for your network
-3. Track trends over 30/60/90 days
-4. Make data-driven decisions, not gut-based
-
-### For Advanced Users:
-1. Customize the insight models for your use case
-2. Add network-specific metrics
-3. Build predictive models using historical data
-4. Integrate with your existing BI tools
-
----
-
-##  Key Takeaways
-
-1. **On-chain data is complete and trustless** - Better than traditional analytics
-2. **Trends matter more than snapshots** - Track velocity, not just position
-3. **Early detection prevents crises** - Spot problems when they're fixable
-4. **Quantitative beats qualitative** - "Gini is 0.73" > "wealth seems concentrated"
-5. **Automation is essential** - Manual monitoring doesn't scale
-6. **Insights must be actionable** - Every metric should suggest an action
-7. **Context is critical** - Same metric means different things at different stages
-
----
-
-##  Support & Customization
-
-This analytics suite is designed to be **extensible**. You can:
-
-- Add custom metrics specific to your network
-- Adjust thresholds for your use case
-- Build additional visualizations
-- Integrate with existing monitoring tools
-- Create custom alerts and notifications
-
-**Remember**: These insights are only valuable if you **act on them**. Data without decisions is just interesting trivia.
-
----
 
