@@ -355,11 +355,100 @@ analyzer.create_update_volume_plot(volume_df, 'output.png')
 analyzer.create_ans_analysis_plot(ans_df, 'output.png')
 ```
 
+## Advanced Analytics Module
+
+For comprehensive on-chain data analysis, use the `splice_analytics.py` module which provides 70+ specialized analysis functions:
+
+```python
+from splice_analytics import (
+    TransactionAnalyzer,
+    MiningRoundAnalyzer,
+    ANSAnalyzer,
+    ValidatorAnalyzer,
+    EconomicAnalyzer,
+    GovernanceAnalyzer,
+    NetworkHealthAnalyzer
+)
+
+# Initialize client
+client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
+
+# Use specialized analyzers
+tx_analyzer = TransactionAnalyzer(client)
+updates = tx_analyzer.fetch_updates_batch(max_pages=10)
+tx_rate = tx_analyzer.calculate_transaction_rate(updates)
+spikes = tx_analyzer.detect_activity_spikes(updates)
+
+mining_analyzer = MiningRoundAnalyzer(client)
+rounds = mining_analyzer.get_all_rounds_summary()
+timing = mining_analyzer.analyze_round_timing()
+
+ans_analyzer = ANSAnalyzer(client)
+entries = ans_analyzer.fetch_all_ans_entries()
+patterns = ans_analyzer.analyze_name_patterns(entries)
+saturation = ans_analyzer.analyze_namespace_saturation(entries)
+premium = ans_analyzer.find_premium_names(entries, criteria={'max_length': 3})
+
+validator_analyzer = ValidatorAnalyzer(client)
+validators = validator_analyzer.get_validator_summary()
+decentralization = validator_analyzer.calculate_decentralization_score(validators)
+
+# Generate comprehensive network health report
+health_analyzer = NetworkHealthAnalyzer(client)
+health_score = health_analyzer.generate_health_score()
+report = health_analyzer.generate_comprehensive_report()
+print(report)
+```
+
+### Available Analysis Functions
+
+**TransactionAnalyzer**:
+- `fetch_updates_batch()` - Fetch updates with pagination
+- `calculate_transaction_rate()` - Throughput and rate statistics
+- `analyze_update_types()` - Update type distribution
+- `detect_activity_spikes()` - Anomaly detection
+- `calculate_growth_rate()` - Period-over-period growth
+
+**MiningRoundAnalyzer**:
+- `get_all_rounds_summary()` - Round state statistics
+- `analyze_round_timing()` - Duration and timing patterns
+- `track_round_progression()` - Historical progression tracking
+
+**ANSAnalyzer**:
+- `fetch_all_ans_entries()` - Complete ANS dataset
+- `analyze_name_patterns()` - Character and length analysis
+- `analyze_expiration_patterns()` - Expiry timeline analysis
+- `analyze_namespace_saturation()` - Short name availability
+- `find_premium_names()` - Premium name identification
+
+**ValidatorAnalyzer**:
+- `get_validator_summary()` - Network statistics
+- `analyze_validator_growth()` - Growth tracking
+- `calculate_decentralization_score()` - Decentralization metric
+
+**EconomicAnalyzer**:
+- `get_total_supply()` - Amulet supply queries
+- `analyze_amulet_rules()` - Economic configuration
+- `estimate_velocity()` - Token velocity estimation
+
+**GovernanceAnalyzer**:
+- `analyze_vote_requests()` - Voting pattern analysis
+- `calculate_governance_participation()` - Participation metrics
+
+**NetworkHealthAnalyzer**:
+- `generate_health_score()` - Composite 100-point health score
+- `generate_comprehensive_report()` - Full network health report
+
+**Utility Functions**:
+- `calculate_gini_coefficient()` - Wealth inequality metric
+- `export_to_csv()` - Export data to CSV files
+
 ## Project Structure
 
 ```
 canton/
 ├── canton_scan_client.py      # Main Splice API client
+├── splice_analytics.py         # Comprehensive analytics module (70+ functions)
 ├── config_example.yaml         # Configuration template
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
