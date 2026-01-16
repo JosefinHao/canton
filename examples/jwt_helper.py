@@ -227,9 +227,9 @@ def main():
         validation = validate_token_claims(token)
 
         if validation['valid']:
-            print("✓ Token claims are valid")
+            print(" Token claims are valid")
         else:
-            print("✗ Token validation failed")
+            print(" Token validation failed")
 
         if validation['errors']:
             print("\nErrors:")

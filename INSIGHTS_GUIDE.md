@@ -6,7 +6,7 @@ This guide explains the **actionable business intelligence** that can be extract
 
 ---
 
-## 🎯 Why These Insights Matter
+##  Why These Insights Matter
 
 On-chain data is a **complete, immutable record** of network activity. Unlike traditional systems where you need surveys or logs, blockchain gives you:
 
@@ -19,7 +19,7 @@ This makes on-chain analytics **more powerful than traditional business intellig
 
 ---
 
-## 📊 Key Insights & Their Business Value
+##  Key Insights & Their Business Value
 
 ### 1. **Network Growth & Sustainability**
 
@@ -36,10 +36,10 @@ This makes on-chain analytics **more powerful than traditional business intellig
 
 #### Actionable Outputs:
 ```
-🚀 EXCELLENT: Strong accelerating growth. Network is scaling well.
-✅ GOOD: Positive growth trend. Continue current strategies.
-⚡ WATCH: Growth slowing. Monitor closely and consider interventions.
-🔴 CRITICAL: Declining activity. Immediate action needed.
+ EXCELLENT: Strong accelerating growth. Network is scaling well.
+ GOOD: Positive growth trend. Continue current strategies.
+ WATCH: Growth slowing. Monitor closely and consider interventions.
+ CRITICAL: Declining activity. Immediate action needed.
 ```
 
 **Example Decision**: If growth is decelerating, you know to launch user acquisition campaigns NOW, not in 3 months.
@@ -68,7 +68,7 @@ Peak Hour: 14:00 UTC (28.3% of activity)
 Weekend Activity: 62% of traffic
 → User Pattern: Casual/consumer user base. Focus on UX and engagement.
 
-Power User Risk: 🔴 HIGH RISK
+Power User Risk:  HIGH RISK
 → Top 10 users = 68% of activity. Network vulnerable to churn.
 ```
 
@@ -127,9 +127,9 @@ Power User Risk: 🔴 HIGH RISK
 
 #### Critical Thresholds:
 ```
-Validators < 10: 🔴 HIGH RISK - Vulnerable to collusion
-Validators 10-50: ⚠️ MODERATE RISK - Acceptable but should grow
-Validators > 50: ✅ LOW RISK - Strong decentralization
+Validators < 10:  HIGH RISK - Vulnerable to collusion
+Validators 10-50:  MODERATE RISK - Acceptable but should grow
+Validators > 50:  LOW RISK - Strong decentralization
 
 Nakamoto Coefficient < 5: Critical vulnerability
 Nakamoto Coefficient > 20: Strong security
@@ -139,7 +139,7 @@ Nakamoto Coefficient > 20: Strong security
 ```
 Total Validators: 8
 Nakamoto Coefficient: 3
-Risk Level: 🔴 HIGH RISK
+Risk Level:  HIGH RISK
 
 Assessment: Only 8 validators. Network vulnerable to collusion.
 Need 3 validators to compromise (33% attack).
@@ -176,10 +176,10 @@ Recommendations:
 #### Actionable Outputs:
 ```
 Acceptance Rate: 15%
-→ ⚠️ Very low acceptance rate. Proposals may not align with community needs.
+→  Very low acceptance rate. Proposals may not align with community needs.
 
 Participation: 8% of validators
-→ 🔴 Low participation. Validators not engaging in governance.
+→  Low participation. Validators not engaging in governance.
 
 Most Common Proposals: Config changes (45%), Upgrades (30%)
 → Community Priority: Protocol parameters and technical improvements
@@ -213,7 +213,7 @@ Multiplier 3-5x: Increased organic activity
 Spike Detected:
   Timestamp: 2026-01-15 14:23:00 UTC
   Activity: 2,847 updates (12.3x normal)
-  Severity: 🔴 CRITICAL
+  Severity:  CRITICAL
   Likely Cause: Possible attack, system issue, or major viral event
 
   Action Required: Investigate immediately
@@ -223,7 +223,7 @@ Spike Detected:
 
 ---
 
-## 📈 The Executive Dashboard
+##  The Executive Dashboard
 
 **One-page visual summary for C-level**
 
@@ -259,7 +259,7 @@ The executive dashboard provides 6 critical views:
 
 ---
 
-## 🎬 Real-World Scenarios
+##  Real-World Scenarios
 
 ### Scenario 1: Detecting Death Spiral Early
 
@@ -269,7 +269,7 @@ The executive dashboard provides 6 critical views:
 **Our Approach**: Alert after 1 week with growth trajectory analysis
 
 **Action Taken**:
-1. Growth analysis shows: "🔴 CRITICAL: Declining activity"
+1. Growth analysis shows: " CRITICAL: Declining activity"
 2. User behavior analysis reveals: Weekend traffic -40%
 3. Power user analysis shows: Top 3 users churned
 
@@ -340,7 +340,7 @@ Peak Hours: 9 AM - 5 PM UTC (business hours)
 
 ---
 
-## 🔧 Technical Implementation
+##  Technical Implementation
 
 ### Quick Start
 
@@ -375,7 +375,7 @@ growth = NetworkGrowthInsights(client)
 trajectory = growth.analyze_growth_trajectory(max_pages=10)
 
 if trajectory['is_decelerating']:
-    print(f"⚠️ ALERT: Growth decelerating at {trajectory['growth_acceleration_pct']:.1f}%")
+    print(f" ALERT: Growth decelerating at {trajectory['growth_acceleration_pct']:.1f}%")
     # Send Slack notification
 
 # 2. Check decentralization
@@ -384,7 +384,7 @@ validators = validator_analyzer.get_validator_summary()
 risk = decentral.assess_decentralization_risk(validators)
 
 if risk['risk_level'] == 'HIGH':
-    print(f"🔴 ALERT: Decentralization risk HIGH - {risk['security_assessment']}")
+    print(f" ALERT: Decentralization risk HIGH - {risk['security_assessment']}")
     # Send email to security team
 
 # 3. Generate daily report
@@ -402,7 +402,7 @@ Run this daily via cron: `0 9 * * * /path/to/daily_check.py`
 
 ---
 
-## 📚 Best Practices
+##  Best Practices
 
 ### 1. **Trend Over Absolute Numbers**
 Don't fixate on "we have 1,000 transactions/day". Focus on: "Is 1,000/day growing or shrinking?"
@@ -424,7 +424,7 @@ Set up daily scripts. Don't rely on manual checks. By the time you manually noti
 
 ---
 
-## 🚀 Next Steps
+##  Next Steps
 
 ### For Immediate Use:
 1. Run `python splice_insights.py` to generate executive dashboard
@@ -446,7 +446,7 @@ Set up daily scripts. Don't rely on manual checks. By the time you manually noti
 
 ---
 
-## 💡 Key Takeaways
+##  Key Takeaways
 
 1. **On-chain data is complete and trustless** - Better than traditional analytics
 2. **Trends matter more than snapshots** - Track velocity, not just position
@@ -458,7 +458,7 @@ Set up daily scripts. Don't rely on manual checks. By the time you manually noti
 
 ---
 
-## 🤝 Support & Customization
+##  Support & Customization
 
 This analytics suite is designed to be **extensible**. You can:
 
@@ -472,4 +472,3 @@ This analytics suite is designed to be **extensible**. You can:
 
 ---
 
-*Built for Canton/Splice Network with ❤️ by data analytics*

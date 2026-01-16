@@ -152,15 +152,15 @@ class NetworkGrowthInsights:
     def _interpret_growth(self, acceleration: float, daily_rate: float) -> str:
         """Generate human-readable interpretation."""
         if daily_rate < 10:
-            return "⚠️ CONCERN: Low activity levels. Network needs growth initiatives."
+            return " CONCERN: Low activity levels. Network needs growth initiatives."
         elif acceleration > 10:
-            return "🚀 EXCELLENT: Strong accelerating growth. Network is scaling well."
+            return " EXCELLENT: Strong accelerating growth. Network is scaling well."
         elif acceleration > 0:
-            return "✅ GOOD: Positive growth trend. Continue current strategies."
+            return " GOOD: Positive growth trend. Continue current strategies."
         elif acceleration > -10:
-            return "⚡ WATCH: Growth slowing. Monitor closely and consider interventions."
+            return " WATCH: Growth slowing. Monitor closely and consider interventions."
         else:
-            return "🔴 CRITICAL: Declining activity. Immediate action needed."
+            return " CRITICAL: Declining activity. Immediate action needed."
 
     def detect_viral_events(
         self,
@@ -286,16 +286,16 @@ class UserBehaviorInsights:
         peak_pct = (hourly_counts[peak_hour] / total * 100) if total > 0 else 0
 
         if peak_pct > 20:
-            return f"⚡ High concentration at {peak_hour}:00 UTC ({peak_pct:.1f}%). Consider auto-scaling during peak hours."
+            return f" High concentration at {peak_hour}:00 UTC ({peak_pct:.1f}%). Consider auto-scaling during peak hours."
         else:
-            return "✅ Activity is well-distributed. Current infrastructure likely sufficient."
+            return " Activity is well-distributed. Current infrastructure likely sufficient."
 
     def _user_pattern_interpretation(self, weekend_pct: float) -> str:
         """Interpret user behavior patterns."""
         if weekend_pct > 50:
-            return "👥 Casual/consumer user base (weekend heavy). Focus on user experience and engagement."
+            return " Casual/consumer user base (weekend heavy). Focus on user experience and engagement."
         elif weekend_pct < 30:
-            return "💼 Professional/developer user base (weekday heavy). Focus on tools and APIs."
+            return " Professional/developer user base (weekday heavy). Focus on tools and APIs."
         else:
             return "⚖️ Balanced user base. Maintain broad appeal."
 
@@ -367,13 +367,13 @@ class UserBehaviorInsights:
     def _assess_concentration_risk(self, concentration_pct: float, gini: float) -> str:
         """Assess risk of user concentration."""
         if concentration_pct > 70:
-            return "🔴 HIGH RISK: Network depends heavily on few users. Diversification critical."
+            return " HIGH RISK: Network depends heavily on few users. Diversification critical."
         elif concentration_pct > 50:
-            return "⚠️ MODERATE RISK: Some concentration. Work on user acquisition."
+            return " MODERATE RISK: Some concentration. Work on user acquisition."
         elif gini > 0.7:
-            return "⚡ WATCH: Activity inequality high. Monitor top user retention."
+            return " WATCH: Activity inequality high. Monitor top user retention."
         else:
-            return "✅ LOW RISK: Good user diversity. Healthy distribution."
+            return " LOW RISK: Good user diversity. Healthy distribution."
 
 
 # ========== Economic Health Insights ==========
@@ -545,11 +545,11 @@ class DecentralizationInsights:
     def _security_assessment(self, validator_count: int, nakamoto: int) -> str:
         """Assess security based on validator count."""
         if validator_count < 10:
-            return f"🔴 HIGH RISK: Only {validator_count} validators. Network vulnerable to collusion. Nakamoto coefficient: {nakamoto}"
+            return f" HIGH RISK: Only {validator_count} validators. Network vulnerable to collusion. Nakamoto coefficient: {nakamoto}"
         elif validator_count < 50:
-            return f"⚠️ MODERATE RISK: {validator_count} validators. Acceptable but should grow. Nakamoto coefficient: {nakamoto}"
+            return f" MODERATE RISK: {validator_count} validators. Acceptable but should grow. Nakamoto coefficient: {nakamoto}"
         else:
-            return f"✅ GOOD: {validator_count} validators. Strong decentralization. Nakamoto coefficient: {nakamoto}"
+            return f" GOOD: {validator_count} validators. Strong decentralization. Nakamoto coefficient: {nakamoto}"
 
     def _decentralization_recommendations(self, validator_count: int) -> List[str]:
         """Recommend actions to improve decentralization."""
@@ -634,19 +634,19 @@ class GovernanceInsights:
         insights = []
 
         if acceptance_rate < 20:
-            insights.append("⚠️ Very low acceptance rate. Proposals may not align with community needs.")
+            insights.append(" Very low acceptance rate. Proposals may not align with community needs.")
         elif acceptance_rate > 80:
-            insights.append("⚡ Very high acceptance rate. May indicate rubber-stamping or lack of scrutiny.")
+            insights.append(" Very high acceptance rate. May indicate rubber-stamping or lack of scrutiny.")
         else:
-            insights.append("✅ Healthy acceptance rate. Good balance of approval/rejection.")
+            insights.append(" Healthy acceptance rate. Good balance of approval/rejection.")
 
         votes_per_validator = participation.get('votes_per_validator', 0)
         if votes_per_validator < 0.05:
-            insights.append("🔴 Low participation. Validators not engaging in governance.")
+            insights.append(" Low participation. Validators not engaging in governance.")
         elif votes_per_validator < 0.2:
-            insights.append("⚡ Moderate participation. Room for improvement.")
+            insights.append(" Moderate participation. Room for improvement.")
         else:
-            insights.append("✅ Good participation levels.")
+            insights.append(" Good participation levels.")
 
         return insights
 
@@ -958,14 +958,14 @@ def main():
     client = SpliceScanClient(base_url=BASE_URL)
 
     # Initialize insight generators
-    print("📊 Initializing insight analyzers...")
+    print(" Initializing insight analyzers...")
     growth_insights = NetworkGrowthInsights(client)
     behavior_insights = UserBehaviorInsights(client)
     visualizer = InsightVisualizer(client)
 
     # 1. Growth Trajectory Analysis
     print("\n" + "=" * 80)
-    print("🚀 GROWTH TRAJECTORY ANALYSIS")
+    print(" GROWTH TRAJECTORY ANALYSIS")
     print("=" * 80)
     try:
         growth = growth_insights.analyze_growth_trajectory(max_pages=10)
@@ -983,7 +983,7 @@ def main():
 
     # 2. User Behavior Patterns
     print("\n" + "=" * 80)
-    print("👥 USER BEHAVIOR PATTERNS")
+    print(" USER BEHAVIOR PATTERNS")
     print("=" * 80)
     try:
         tx_analyzer = TransactionAnalyzer(client)
@@ -1000,7 +1000,7 @@ def main():
 
     # 3. Create Executive Dashboard
     print("\n" + "=" * 80)
-    print("📈 GENERATING EXECUTIVE DASHBOARD")
+    print(" GENERATING EXECUTIVE DASHBOARD")
     print("=" * 80)
     try:
         visualizer.create_executive_dashboard('splice_executive_dashboard.png')
@@ -1011,7 +1011,7 @@ def main():
     client.close()
 
     print("\n" + "=" * 80)
-    print("✅ INSIGHTS ANALYSIS COMPLETE")
+    print(" INSIGHTS ANALYSIS COMPLETE")
     print("=" * 80)
 
 

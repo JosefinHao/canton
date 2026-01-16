@@ -2,7 +2,7 @@
 
 A comprehensive Python client for querying and analyzing on-chain data from the Splice Network using the Scan API.
 
-## 🚀 Quick Start - No Authentication Required!
+##  Quick Start - No Authentication Required!
 
 **The Splice Network Scan API is completely PUBLIC** - you can start retrieving on-chain data immediately with zero authentication setup!
 
@@ -545,15 +545,15 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 ### Actionable Outputs
 
 **Risk Assessments**:
-- 🔴 HIGH RISK / ⚠️ MODERATE RISK / ✅ LOW RISK classifications
+-  HIGH RISK /  MODERATE RISK /  LOW RISK classifications
 - Specific recommendations for each risk area
 - Quantitative thresholds and scoring
 
 **Growth Interpretations**:
-- 🚀 EXCELLENT: Strong accelerating growth
-- ✅ GOOD: Positive growth trend
-- ⚡ WATCH: Growth slowing, monitor closely
-- 🔴 CRITICAL: Declining activity, action needed
+-  EXCELLENT: Strong accelerating growth
+-  GOOD: Positive growth trend
+-  WATCH: Growth slowing, monitor closely
+-  CRITICAL: Declining activity, action needed
 
 **Infrastructure Recommendations**:
 - Auto-scaling recommendations based on peak patterns
