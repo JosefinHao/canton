@@ -2,7 +2,7 @@
 
 A comprehensive Python client for querying and analyzing on-chain data from the Splice Network using the Scan API.
 
-## 🚀 Quick Start - No Authentication Required!
+##  Quick Start - No Authentication Required!
 
 **The Splice Network Scan API is completely PUBLIC** - you can start retrieving on-chain data immediately with zero authentication setup!
 
@@ -443,7 +443,146 @@ print(report)
 - `calculate_gini_coefficient()` - Wealth inequality metric
 - `export_to_csv()` - Export data to CSV files
 
+## Data Analytics Insights
+
+For executive-level insights and strategic decision-making, use the `splice_insights.py` module which provides actionable business intelligence:
+
+```python
+from splice_insights import (
+    NetworkGrowthInsights,
+    UserBehaviorInsights,
+    EconomicHealthInsights,
+    DecentralizationInsights,
+    GovernanceInsights,
+    InsightVisualizer
+)
+
+client = SpliceScanClient(base_url="...")
+
+# Growth & Sustainability Analysis
+growth_insights = NetworkGrowthInsights(client)
+trajectory = growth_insights.analyze_growth_trajectory(max_pages=20)
+
+print(f"Growth Status: {trajectory['interpretation']}")
+print(f"30-day Projection: {trajectory['projection_30d']} updates")
+print(f"Sustainability Score: {trajectory['sustainability_score']}/100")
+
+# Detect viral events or anomalies
+spikes = growth_insights.detect_viral_events(updates, spike_threshold=3.0)
+for spike in spikes:
+    print(f"Spike at {spike['timestamp']}: {spike['severity']} - {spike['likely_cause']}")
+
+# User Behavior & Infrastructure Optimization
+behavior_insights = UserBehaviorInsights(client)
+patterns = behavior_insights.analyze_temporal_patterns(updates)
+
+print(f"Peak Hour: {patterns['peak_hour_utc']}:00 UTC")
+print(f"Infrastructure Insight: {patterns['infrastructure_insight']}")
+print(f"User Pattern: {patterns['user_pattern_insight']}")
+
+# Power user analysis
+power_users = behavior_insights.analyze_power_users(updates)
+print(f"Concentration Risk: {power_users['risk_assessment']}")
+print(f"Diversity Score: {power_users['diversity_score']}/100")
+
+# Economic Health Assessment
+economic_insights = EconomicHealthInsights(client)
+velocity_analysis = economic_insights.analyze_token_velocity(updates, total_supply=1000000)
+print(f"Velocity Recommendations: {velocity_analysis['recommendations']}")
+
+# Decentralization & Security
+decentral_insights = DecentralizationInsights(client)
+risk_assessment = decentral_insights.assess_decentralization_risk(validator_data)
+
+print(f"Security Risk Level: {risk_assessment['risk_level']}")
+print(f"Nakamoto Coefficient: {risk_assessment['nakamoto_coefficient_estimate']}")
+print(f"Assessment: {risk_assessment['security_assessment']}")
+
+# Governance Effectiveness
+gov_insights = GovernanceInsights(client)
+governance_health = gov_insights.analyze_governance_health(vote_data, validator_count)
+
+print(f"Governance Health: {governance_health['overall_health']}")
+print(f"Community Priorities: {governance_health['community_priorities']}")
+
+# Generate Executive Dashboard (one-page visual summary)
+visualizer = InsightVisualizer(client)
+visualizer.create_executive_dashboard('executive_dashboard.png')
+```
+
+### Critical Business Questions Answered
+
+**For Executives & Investors:**
+- Is the network growing sustainably? → Growth trajectory analysis
+- What's the 30/90/180-day outlook? → Growth projections
+- Is the network healthy overall? → Composite health score (0-100)
+- Where should we invest resources? → Risk assessments & recommendations
+
+**For Network Operators:**
+- When should we scale infrastructure? → Peak hour analysis
+- Are we at risk from power users? → Concentration risk metrics
+- What's causing traffic spikes? → Anomaly detection with cause inference
+- Is decentralization improving? → Decentralization score tracking
+
+**For Token Economists:**
+- Is wealth concentrating dangerously? → Gini coefficient & inequality metrics
+- Is token velocity healthy? → Velocity analysis with interpretations
+- What's the supply outlook? → Supply dynamics tracking
+- Are we at risk of plutocracy? → Wealth concentration assessments
+
+**For Security Teams:**
+- How many validators to compromise? → Nakamoto coefficient
+- Is centralization increasing? → Decentralization risk scoring
+- Are there geographic risks? → Validator distribution analysis
+- What's our security posture? → Comprehensive security assessment
+
+**For Community Managers:**
+- When are users most active? → Temporal pattern analysis
+- Who are the power users? → Top user identification
+- Is participation healthy? → Governance participation metrics
+- What does community want? → Priority inference from proposals
+
+### Actionable Outputs
+
+**Risk Assessments**:
+-  HIGH RISK /  MODERATE RISK /  LOW RISK classifications
+- Specific recommendations for each risk area
+- Quantitative thresholds and scoring
+
+**Growth Interpretations**:
+-  EXCELLENT: Strong accelerating growth
+-  GOOD: Positive growth trend
+-  WATCH: Growth slowing, monitor closely
+-  CRITICAL: Declining activity, action needed
+
+**Infrastructure Recommendations**:
+- Auto-scaling recommendations based on peak patterns
+- Resource allocation guidance
+- Cost optimization opportunities
+
+**Executive Visualizations**:
+- 6-panel executive dashboard (PNG export)
+- Growth trajectories with trend lines
+- Activity heatmaps (hourly × daily)
+- Health score gauges
+- Key metrics summaries
+- Distribution charts
+
 ## Project Structure
+
+```
+canton/
+├── canton_scan_client.py      # Main Splice API client
+├── splice_analytics.py         # Comprehensive analytics module (70+ functions)
+├── splice_insights.py          # Data analytics insights & visualizations
+├── config_example.yaml         # Configuration template
+├── requirements.txt            # Python dependencies
+├── README.md                   # This file
+└── examples/
+    ├── basic_queries.py        # Basic query examples
+    ├── data_analysis.py        # Data analysis examples
+    └── jwt_helper.py           # JWT token utilities (for other APIs)
+```
 
 ```
 canton/
