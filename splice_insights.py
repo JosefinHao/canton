@@ -951,7 +951,7 @@ def main():
     BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
     print("=" * 80)
-    print("SPLICE NETWORK - SENIOR DATA SCIENCE INSIGHTS")
+    print("SPLICE NETWORK - DATA ANALYTICS INSIGHTS")
     print("=" * 80)
     print()
 

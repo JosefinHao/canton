@@ -443,7 +443,7 @@ print(report)
 - `calculate_gini_coefficient()` - Wealth inequality metric
 - `export_to_csv()` - Export data to CSV files
 
-## Senior Data Science Insights
+## Data Analytics Insights
 
 For executive-level insights and strategic decision-making, use the `splice_insights.py` module which provides actionable business intelligence:
 
@@ -574,7 +574,7 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 canton/
 ├── canton_scan_client.py      # Main Splice API client
 ├── splice_analytics.py         # Comprehensive analytics module (70+ functions)
-├── splice_insights.py          # Senior data science insights & visualizations
+├── splice_insights.py          # Data analytics insights & visualizations
 ├── config_example.yaml         # Configuration template
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
