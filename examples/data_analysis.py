@@ -152,10 +152,20 @@ class SpliceDataAnalyzer:
 
             # Extract round numbers
             if open_rounds:
-                round_numbers = [
-                    r.get('payload', {}).get('round', {}).get('number', 0)
-                    for r in open_rounds
-                ]
+                round_numbers = []
+                for r in open_rounds:
+                    # Validate each round is a dict before accessing fields
+                    if isinstance(r, dict):
+                        payload = r.get('payload', {})
+                        if isinstance(payload, dict):
+                            round_info = payload.get('round', {})
+                            if isinstance(round_info, dict):
+                                number = round_info.get('number', 0)
+                                if number:
+                                    round_numbers.append(number)
+                    else:
+                        print(f"Warning: open_round item is not a dict: {type(r)}")
+
                 if round_numbers:
                     analysis['latest_open_round'] = max(round_numbers)
 
