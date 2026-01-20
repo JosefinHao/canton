@@ -3,9 +3,6 @@ Basic Query Examples for Splice Network Scan API
 
 This script demonstrates basic usage of the Splice Scan API client
 to retrieve on-chain data from the Splice Network.
-
-The Scan API is completely PUBLIC - no authentication required!
-Just provide the API URL and start querying immediately.
 """
 
 import sys
@@ -21,8 +18,6 @@ from canton_scan_client import SpliceScanClient
 def main():
     """Run basic query examples."""
 
-    # Configuration - Replace with your actual Splice Scan API URL
-    # No authentication required - the API is completely public!
     BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
     # Initialize client - no authentication needed!

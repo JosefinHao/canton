@@ -2,7 +2,6 @@
 Splice Network Scan API Client
 
 A Python client for querying Splice Network on-chain data through the Scan API.
-The Scan API is completely public - no authentication required!
 Provides methods for data retrieval and analysis.
 """
 
