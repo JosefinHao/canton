@@ -699,7 +699,7 @@ class ValidatorAnalyzer:
             Dictionary with validator statistics
         """
         try:
-            validators = self.client.get_validator_licenses(limit=10000)
+            validators = self.client.get_validator_licenses(limit=1000)
             validator_list = validators.get('validators', [])
 
             sponsored = sum(1 for v in validator_list if v.get('sponsored'))
