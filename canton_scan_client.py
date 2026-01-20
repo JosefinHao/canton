@@ -52,8 +52,8 @@ class SpliceScanClient:
         self.session.mount("https://", adapter)
 
         # Set default headers
+        # Note: Don't set Content-Type globally - only when actually sending JSON
         headers = {
-            'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
 
@@ -87,11 +87,11 @@ class SpliceScanClient:
 
         try:
             # Prepare headers for this request
-            # Remove Content-Type header if no JSON data is being sent
-            headers = {}
-            if json_data is None and method == 'POST':
-                # For POST with no body, explicitly remove Content-Type
-                headers['Content-Type'] = None
+            # Add Content-Type header only when sending JSON data
+            request_headers = None
+            if json_data is not None:
+                # Only set Content-Type when actually sending JSON
+                request_headers = {'Content-Type': 'application/json'}
 
             response = self.session.request(
                 method=method,
@@ -99,7 +99,7 @@ class SpliceScanClient:
                 params=params,
                 data=data,
                 json=json_data,
-                headers=headers if headers else None,
+                headers=request_headers,
                 timeout=self.timeout
             )
             response.raise_for_status()
@@ -112,7 +112,13 @@ class SpliceScanClient:
 
         except requests.exceptions.HTTPError as e:
             print(f"HTTP Error: {e}")
-            print(f"Response: {e.response.text if e.response else 'No response'}")
+            # Print more debug info
+            if e.response is not None:
+                print(f"Response status: {e.response.status_code}")
+                print(f"Response headers: {e.response.headers}")
+                print(f"Response body: {e.response.text if e.response.text else 'Empty'}")
+            else:
+                print(f"No response received")
             raise
         except requests.exceptions.RequestException as e:
             print(f"Request Error: {e}")
