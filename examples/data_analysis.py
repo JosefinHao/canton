@@ -129,8 +129,17 @@ class SpliceDataAnalyzer:
                 return {}
 
             open_rounds = open_issuing.get('open_mining_rounds', [])
+            # Validate that open_rounds is a list
+            if not isinstance(open_rounds, list):
+                print(f"Warning: open_mining_rounds is not a list, got {type(open_rounds)}: {open_rounds}")
+                open_rounds = []
+
             # Try both possible key names for issuing rounds
             issuing_rounds = open_issuing.get('issuing_mining_rounds', open_issuing.get('issuing_rounds', []))
+            # Validate that issuing_rounds is a list
+            if not isinstance(issuing_rounds, list):
+                print(f"Warning: issuing_rounds is not a list, got {type(issuing_rounds)}: {issuing_rounds}")
+                issuing_rounds = []
 
             # Get closed rounds
             closed = self.client.get_closed_rounds()
@@ -142,6 +151,10 @@ class SpliceDataAnalyzer:
             else:
                 # Try both possible key names for closed rounds
                 closed_rounds = closed.get('rounds', closed.get('closed_rounds', []))
+                # Validate that closed_rounds is a list
+                if not isinstance(closed_rounds, list):
+                    print(f"Warning: closed_rounds is not a list, got {type(closed_rounds)}: {closed_rounds}")
+                    closed_rounds = []
 
             analysis = {
                 'open_rounds_count': len(open_rounds),
