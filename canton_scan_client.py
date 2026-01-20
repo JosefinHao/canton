@@ -17,9 +17,6 @@ from urllib3.util.retry import Retry
 class SpliceScanClient:
     """
     Client for interacting with Splice Network Scan API.
-
-    The Scan API is completely public and requires no authentication!
-    Simply provide the base URL and start querying on-chain data.
     """
 
     def __init__(

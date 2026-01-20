@@ -20,8 +20,7 @@ def main():
 
     BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
-    # Initialize client - no authentication needed!
-    print("Initializing Splice Scan API client (no auth required!)...")
+    print("Initializing Splice Scan API client...")
     client = SpliceScanClient(base_url=BASE_URL)
 
     # Example 1: Health Check
