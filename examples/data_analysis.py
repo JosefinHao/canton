@@ -101,7 +101,7 @@ class SpliceDataAnalyzer:
         # Parse timestamps
         df['timestamp'] = pd.to_datetime(df['record_time'])
         df['date'] = df['timestamp'].dt.date
-        df['hour'] = df['timestamp'].dt.floor('H')
+        df['hour'] = df['timestamp'].dt.floor('h')
 
         # Calculate volume by hour
         volume_df = df.groupby('hour').agg({
