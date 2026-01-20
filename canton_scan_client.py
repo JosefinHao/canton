@@ -86,12 +86,20 @@ class SpliceScanClient:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
 
         try:
+            # Prepare headers for this request
+            # Remove Content-Type header if no JSON data is being sent
+            headers = {}
+            if json_data is None and method == 'POST':
+                # For POST with no body, explicitly remove Content-Type
+                headers['Content-Type'] = None
+
             response = self.session.request(
                 method=method,
                 url=url,
                 params=params,
                 data=data,
                 json=json_data,
+                headers=headers if headers else None,
                 timeout=self.timeout
             )
             response.raise_for_status()
