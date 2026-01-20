@@ -580,8 +580,7 @@ canton/
 ├── README.md                   # This file
 └── examples/
     ├── basic_queries.py        # Basic query examples
-    ├── data_analysis.py        # Data analysis examples
-    └── jwt_helper.py           # JWT token utilities (for other APIs)
+    └── data_analysis.py        # Data analysis examples
 ```
 
 ```
@@ -593,8 +592,7 @@ canton/
 ├── README.md                   # This file
 └── examples/
     ├── basic_queries.py        # Basic query examples
-    ├── data_analysis.py        # Data analysis examples
-    └── jwt_helper.py           # JWT token utilities (for other APIs)
+    └── data_analysis.py        # Data analysis examples
 ```
 
 ## Error Handling

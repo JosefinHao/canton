@@ -25,7 +25,6 @@ class SpliceScanClient:
     def __init__(
         self,
         base_url: str,
-        jwt_token: Optional[str] = None,
         timeout: int = 30,
         max_retries: int = 3
     ):
@@ -34,12 +33,10 @@ class SpliceScanClient:
 
         Args:
             base_url: Base URL of the Scan API (e.g., 'https://scan.splice.network/api/v0')
-            jwt_token: Optional JWT token (not required - Scan API is public)
             timeout: Request timeout in seconds (default: 30)
             max_retries: Maximum number of retry attempts (default: 3)
         """
         self.base_url = base_url.rstrip('/')
-        self.jwt_token = jwt_token
         self.timeout = timeout
 
         # Configure session with retry strategy
@@ -59,10 +56,6 @@ class SpliceScanClient:
             'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
-
-        # Add authorization header only if token is provided
-        if jwt_token:
-            headers['Authorization'] = f'Bearer {jwt_token}'
 
         self.session.headers.update(headers)
 

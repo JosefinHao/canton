@@ -5,8 +5,7 @@ config.yaml
 *.yaml.local
 *.yml.local
 
-# JWT tokens and secrets
-*.jwt
+# Secrets and credentials
 *.pem
 *.key
 secrets/
