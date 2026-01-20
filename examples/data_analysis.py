@@ -74,7 +74,8 @@ class SpliceDataAnalyzer:
                     page_size=page_size
                 )
 
-                updates = result.get('updates', [])
+                # Try both 'transactions' and 'updates' keys for backward compatibility
+                updates = result.get('transactions', result.get('updates', []))
                 if not updates:
                     break
 
@@ -125,11 +126,13 @@ class SpliceDataAnalyzer:
             # Get open and issuing rounds
             open_issuing = self.client.get_open_and_issuing_mining_rounds()
             open_rounds = open_issuing.get('open_mining_rounds', [])
-            issuing_rounds = open_issuing.get('issuing_rounds', [])
+            # Try both possible key names for issuing rounds
+            issuing_rounds = open_issuing.get('issuing_mining_rounds', open_issuing.get('issuing_rounds', []))
 
             # Get closed rounds
             closed = self.client.get_closed_rounds()
-            closed_rounds = closed.get('closed_rounds', [])
+            # Try both possible key names for closed rounds
+            closed_rounds = closed.get('rounds', closed.get('closed_rounds', []))
 
             analysis = {
                 'open_rounds_count': len(open_rounds),
@@ -197,7 +200,12 @@ class SpliceDataAnalyzer:
         # Parse expiration times if available
         if 'expires_at' in df.columns:
             df['expires_at_dt'] = pd.to_datetime(df['expires_at'], errors='coerce')
-            df['days_until_expiry'] = (df['expires_at_dt'] - pd.Timestamp.now()).dt.days
+            # Use UTC timezone to match the timezone-aware datetime from API
+            now = pd.Timestamp.now(tz='UTC')
+            # If expires_at_dt is timezone-naive, localize it to UTC
+            if df['expires_at_dt'].dt.tz is None:
+                df['expires_at_dt'] = df['expires_at_dt'].dt.tz_localize('UTC')
+            df['days_until_expiry'] = (df['expires_at_dt'] - now).dt.days
 
         return df
 
@@ -213,7 +221,8 @@ class SpliceDataAnalyzer:
         try:
             # Get validator licenses
             validators = self.client.get_validator_licenses(limit=1000)
-            validator_list = validators.get('validators', [])
+            # Try both possible key names for backward compatibility
+            validator_list = validators.get('validator_licenses', validators.get('validators', []))
 
             analysis = {
                 'total_validators': len(validator_list),
