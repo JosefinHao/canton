@@ -470,14 +470,12 @@ class SpliceScanClient:
         Returns:
             Dictionary containing open_mining_rounds, issuing_mining_rounds, time_to_live_in_microseconds
         """
-        json_data: Optional[Dict[str, Any]] = None
+        json_data: Dict[str, Any] = {}
 
-        if cached_open_mining_round_contract_ids or cached_issuing_round_contract_ids:
-            json_data = {}
-            if cached_open_mining_round_contract_ids:
-                json_data['cached_open_mining_round_contract_ids'] = cached_open_mining_round_contract_ids
-            if cached_issuing_round_contract_ids:
-                json_data['cached_issuing_round_contract_ids'] = cached_issuing_round_contract_ids
+        if cached_open_mining_round_contract_ids:
+            json_data['cached_open_mining_round_contract_ids'] = cached_open_mining_round_contract_ids
+        if cached_issuing_round_contract_ids:
+            json_data['cached_issuing_round_contract_ids'] = cached_issuing_round_contract_ids
 
         return self._make_request('POST', '/v0/open-and-issuing-mining-rounds', json_data=json_data)
 
