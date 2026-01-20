@@ -156,9 +156,9 @@ def main():
     print("="*60)
     try:
         featured_apps = client.get_featured_apps()
-        print(f"Retrieved {len(featured_apps.get('featured_app_rights', []))} featured apps")
+        print(f"Retrieved {len(featured_apps.get('featured_apps', []))} featured apps")
 
-        for i, app in enumerate(featured_apps.get('featured_app_rights', [])[:3], 1):
+        for i, app in enumerate(featured_apps.get('featured_apps', [])[:3], 1):
             print(f"\nFeatured App {i}:")
             print(f"  Provider: {app.get('provider', 'N/A')}")
 
