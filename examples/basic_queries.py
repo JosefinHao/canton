@@ -126,11 +126,12 @@ def main():
     print("="*60)
     try:
         closed_rounds = client.get_closed_rounds()
-        print(f"Retrieved {len(closed_rounds.get('closed_rounds', []))} closed rounds")
+        print(f"Retrieved {len(closed_rounds.get('rounds', []))} closed rounds")
 
-        for i, round_data in enumerate(closed_rounds.get('closed_rounds', [])[:2], 1):
+        for i, round_data in enumerate(closed_rounds.get('rounds', [])[:2], 1):
             print(f"\nClosed Round {i}:")
-            print(f"  Round: {round_data}")
+            print(f"  Contract ID: {round_data.get('contract_id', 'N/A')}")
+            print(f"  Created At: {round_data.get('created_at', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
