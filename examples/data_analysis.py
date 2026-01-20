@@ -134,8 +134,14 @@ class SpliceDataAnalyzer:
 
             # Get closed rounds
             closed = self.client.get_closed_rounds()
-            # Try both possible key names for closed rounds
-            closed_rounds = closed.get('rounds', closed.get('closed_rounds', []))
+
+            # Validate response type
+            if not isinstance(closed, dict):
+                print(f"Warning: Expected dict from get_closed_rounds, got {type(closed)}: {closed}")
+                closed_rounds = []
+            else:
+                # Try both possible key names for closed rounds
+                closed_rounds = closed.get('rounds', closed.get('closed_rounds', []))
 
             analysis = {
                 'open_rounds_count': len(open_rounds),
