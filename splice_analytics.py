@@ -298,26 +298,48 @@ class MiningRoundAnalyzer:
             open_issuing = self.client.get_open_and_issuing_mining_rounds()
             closed = self.client.get_closed_rounds()
 
+            # Validate response types
+            if not isinstance(open_issuing, dict):
+                open_issuing = {}
+            if not isinstance(closed, dict):
+                closed = {}
+
             open_rounds = open_issuing.get('open_mining_rounds', [])
             issuing_rounds = open_issuing.get('issuing_rounds', [])
             closed_rounds = closed.get('closed_rounds', [])
 
+            # Validate that values are lists
+            if not isinstance(open_rounds, list):
+                open_rounds = []
+            if not isinstance(issuing_rounds, list):
+                issuing_rounds = []
+            if not isinstance(closed_rounds, list):
+                closed_rounds = []
+
             # Extract round numbers
             open_numbers = []
             for r in open_rounds:
-                try:
-                    num = r.get('payload', {}).get('round', {}).get('number', 0)
-                    open_numbers.append(num)
-                except:
-                    pass
+                # Validate each round is a dict before accessing fields
+                if isinstance(r, dict):
+                    payload = r.get('payload', {})
+                    if isinstance(payload, dict):
+                        round_info = payload.get('round', {})
+                        if isinstance(round_info, dict):
+                            number = round_info.get('number', 0)
+                            if number:
+                                open_numbers.append(number)
 
             issuing_numbers = []
             for r in issuing_rounds:
-                try:
-                    num = r.get('payload', {}).get('round', {}).get('number', 0)
-                    issuing_numbers.append(num)
-                except:
-                    pass
+                # Validate each round is a dict before accessing fields
+                if isinstance(r, dict):
+                    payload = r.get('payload', {})
+                    if isinstance(payload, dict):
+                        round_info = payload.get('round', {})
+                        if isinstance(round_info, dict):
+                            number = round_info.get('number', 0)
+                            if number:
+                                issuing_numbers.append(number)
 
             return {
                 'open_rounds_count': len(open_rounds),
