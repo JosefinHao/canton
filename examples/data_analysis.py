@@ -125,6 +125,12 @@ class SpliceDataAnalyzer:
         try:
             # Get open and issuing rounds
             open_issuing = self.client.get_open_and_issuing_mining_rounds()
+
+            # Validate response type
+            if not isinstance(open_issuing, dict):
+                print(f"Warning: Expected dict, got {type(open_issuing)}: {open_issuing}")
+                return {}
+
             open_rounds = open_issuing.get('open_mining_rounds', [])
             # Try both possible key names for issuing rounds
             issuing_rounds = open_issuing.get('issuing_mining_rounds', open_issuing.get('issuing_rounds', []))
