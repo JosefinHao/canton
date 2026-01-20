@@ -484,13 +484,12 @@ class SpliceScanClient:
         Returns:
             Dictionary containing open_mining_rounds, issuing_mining_rounds, time_to_live_in_microseconds
         """
-        # API requires a request body, even if empty
-        json_data: Dict[str, Any] = {}
-
-        if cached_open_mining_round_contract_ids:
-            json_data['cached_open_mining_round_contract_ids'] = cached_open_mining_round_contract_ids
-        if cached_issuing_round_contract_ids:
-            json_data['cached_issuing_round_contract_ids'] = cached_issuing_round_contract_ids
+        # API requires both fields to be present in the request body
+        # They can be empty arrays if no cached IDs are provided
+        json_data: Dict[str, Any] = {
+            'cached_open_mining_round_contract_ids': cached_open_mining_round_contract_ids or [],
+            'cached_issuing_round_contract_ids': cached_issuing_round_contract_ids or []
+        }
 
         return self._make_request('POST', '/v0/open-and-issuing-mining-rounds', json_data=json_data)
 
