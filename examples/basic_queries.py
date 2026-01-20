@@ -116,12 +116,11 @@ def main():
     try:
         rounds = client.get_open_and_issuing_mining_rounds()
         print(f"Open Rounds: {len(rounds.get('open_mining_rounds', []))}")
-        print(f"Issuing Rounds: {len(rounds.get('issuing_rounds', []))}")
+        print(f"Issuing Rounds: {len(rounds.get('issuing_mining_rounds', []))}")
 
         for i, round_data in enumerate(rounds.get('open_mining_rounds', [])[:2], 1):
             print(f"\nOpen Round {i}:")
-            print(f"  Round Number: {round_data.get('payload', {}).get('round', {}).get('number', 'N/A')}")
-            print(f"  Opens At: {round_data.get('payload', {}).get('opensAt', 'N/A')}")
+            print(f"  Contract: {round_data.get('contract', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -155,40 +154,17 @@ def main():
     except Exception as e:
         print(f"Error: {e}")
 
-    # Example 10: Get Featured App Rights
+    # Example 10: Get Featured Apps
     print("\n" + "="*60)
-    print("Example 10: Featured App Rights")
+    print("Example 10: Featured Apps")
     print("="*60)
     try:
-        featured_apps = client.get_featured_app_rights()
-        print(f"Retrieved {len(featured_apps.get('app_rights', []))} featured apps")
+        featured_apps = client.get_featured_apps()
+        print(f"Retrieved {len(featured_apps.get('featured_app_rights', []))} featured apps")
 
-        for i, app in enumerate(featured_apps.get('app_rights', [])[:3], 1):
+        for i, app in enumerate(featured_apps.get('featured_app_rights', [])[:3], 1):
             print(f"\nFeatured App {i}:")
             print(f"  Provider: {app.get('provider', 'N/A')}")
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-    # Example 11: Get Total Amulet Balance
-    print("\n" + "="*60)
-    print("Example 11: Total Amulet Balance")
-    print("="*60)
-    try:
-        balance = client.get_total_amulet_balance(round_=0)
-        print(f"Total Amulet Balance:")
-        print(f"  {balance}")
-
-    except Exception as e:
-        print(f"Error: {e}")
-
-    # Example 12: List Active Synchronizers
-    print("\n" + "="*60)
-    print("Example 12: Active Synchronizers")
-    print("="*60)
-    try:
-        synchronizers = client.list_activity(active_synchronizer_id="global-domain::1220...")
-        print(f"Synchronizer Activity: {synchronizers}")
 
     except Exception as e:
         print(f"Error: {e}")
