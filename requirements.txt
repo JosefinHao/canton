@@ -12,10 +12,6 @@ seaborn>=0.12.0
 # Configuration management
 pyyaml>=6.0.0
 
-# JWT handling (for token inspection/validation)
-pyjwt>=2.8.0
-cryptography>=41.0.0
-
 # Additional utilities
 python-dateutil>=2.8.0
 pytz>=2023.3

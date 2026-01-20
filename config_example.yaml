@@ -14,16 +14,6 @@ api:
   # Maximum number of retries for failed requests
   max_retries: 3
 
-# Authentication Configuration (OPTIONAL - NOT REQUIRED FOR SCAN API)
-# Only needed if you're using this client with other Canton APIs that require auth
-auth:
-  # JWT Token (NOT needed for Scan API!)
-  # Only use this if connecting to other Canton APIs that require authentication
-  jwt_token: null
-
-  # Alternative: Path to file containing JWT token
-  # jwt_token_file: null
-
 # Query Configuration
 query:
   # Default batch size for paginated queries
