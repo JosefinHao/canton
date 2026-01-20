@@ -77,13 +77,13 @@ def main():
     print("="*60)
     try:
         updates = client.get_updates(page_size=10)
-        print(f"Retrieved {len(updates.get('updates', []))} updates")
+        print(f"Retrieved {len(updates.get('transactions', []))} updates")
 
-        for i, update in enumerate(updates.get('updates', [])[:3], 1):
+        for i, update in enumerate(updates.get('transactions', [])[:3], 1):
             print(f"\nUpdate {i}:")
             print(f"  Record Time: {update.get('record_time', 'N/A')}")
             print(f"  Migration ID: {update.get('migration_id', 'N/A')}")
-            print(f"  Update Type: {update.get('update', {}).get('type', 'N/A')}")
+            print(f"  Update ID: {update.get('update_id', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -94,12 +94,12 @@ def main():
     print("="*60)
     try:
         validators = client.get_validator_licenses(limit=10)
-        print(f"Retrieved {len(validators.get('validators', []))} validators")
+        print(f"Retrieved {len(validators.get('validator_licenses', []))} validators")
 
-        for i, validator in enumerate(validators.get('validators', [])[:3], 1):
+        for i, validator in enumerate(validators.get('validator_licenses', [])[:3], 1):
             print(f"\nValidator {i}:")
-            print(f"  Validator: {validator.get('validator', 'N/A')}")
-            print(f"  Sponsored: {validator.get('sponsored', 'N/A')}")
+            print(f"  Contract ID: {validator.get('contract_id', 'N/A')}")
+            print(f"  Created At: {validator.get('created_at', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
