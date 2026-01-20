@@ -2,9 +2,7 @@
 
 A comprehensive Python client for querying and analyzing on-chain data from the Splice Network using the Scan API.
 
-##  Quick Start - No Authentication Required!
-
-**The Splice Network Scan API is completely PUBLIC** - you can start retrieving on-chain data immediately with zero authentication setup!
+## Quick Start
 
 ```python
 from canton_scan_client import SpliceScanClient
@@ -22,11 +20,9 @@ This client provides an easy-to-use interface for:
 - Analyzing on-chain data patterns and trends for the Splice ecosystem
 - Tracking mining rounds, validators, and DSO information
 - Generating reports and visualizations
-- All **without any authentication required**!
 
 ## Features
 
-- **Zero Setup**: No authentication, tokens, or credentials required
 - **Full Splice API Coverage**: Support for all Splice Scan API endpoints
 - **Robust Error Handling**: Automatic retries and comprehensive error messages
 - **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, and ANS entries
@@ -39,7 +35,6 @@ This client provides an easy-to-use interface for:
 ### Prerequisites
 
 - Python 3.8 or higher
-- That's it! No credentials or authentication needed
 
 ### Setup
 
@@ -62,19 +57,15 @@ For minimal installation (without data analysis features):
 pip install requests urllib3
 ```
 
-3. Start using immediately - no configuration needed!
-
 ## Configuration
 
 ### API URL
 
-The Splice Network Scan API is publicly accessible at:
+The Splice Network Scan API is accessible at:
 
 ```
 https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/
 ```
-
-Simply provide this URL when initializing the client - **no authentication required**!
 
 ### Optional Configuration
 
@@ -94,7 +85,7 @@ api:
 ```python
 from canton_scan_client import SpliceScanClient
 
-# Initialize client - no authentication needed!
+# Initialize client
 client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
 
 # Get DSO information
@@ -199,10 +190,10 @@ cd examples
 python basic_queries.py
 ```
 
-The script uses the public API by default - just run it! You can optionally edit the `BASE_URL` if you're using a different Splice Network instance:
+You can optionally edit the `BASE_URL` if you're using a different Splice Network instance:
 
 ```python
-BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"  # Default public API
+BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 ```
 
 ### Data Analysis Example
@@ -692,7 +683,6 @@ For issues and questions:
   - Splice-specific network configuration
 - Updated all examples to use new Splice API methods
 - Updated data analyzer to work with Splice data structures
-- API still completely public - no authentication required!
 
 ### Version 1.0.0
 
