@@ -308,12 +308,20 @@ class MiningRoundAnalyzer:
             issuing_rounds = open_issuing.get('issuing_rounds', [])
             closed_rounds = closed.get('closed_rounds', [])
 
-            # Validate that values are lists
-            if not isinstance(open_rounds, list):
+            # Handle both list and dict formats (API may return dict with contract IDs as keys)
+            if isinstance(open_rounds, dict):
+                open_rounds = list(open_rounds.values())
+            elif not isinstance(open_rounds, list):
                 open_rounds = []
-            if not isinstance(issuing_rounds, list):
+
+            if isinstance(issuing_rounds, dict):
+                issuing_rounds = list(issuing_rounds.values())
+            elif not isinstance(issuing_rounds, list):
                 issuing_rounds = []
-            if not isinstance(closed_rounds, list):
+
+            if isinstance(closed_rounds, dict):
+                closed_rounds = list(closed_rounds.values())
+            elif not isinstance(closed_rounds, list):
                 closed_rounds = []
 
             # Extract round numbers
@@ -321,7 +329,18 @@ class MiningRoundAnalyzer:
             for r in open_rounds:
                 # Validate each round is a dict before accessing fields
                 if isinstance(r, dict):
-                    payload = r.get('payload', {})
+                    # Handle both direct payload format and nested contract format
+                    if 'contract' in r:
+                        # Nested format: payload is under 'contract'
+                        contract = r.get('contract', {})
+                        if isinstance(contract, dict):
+                            payload = contract.get('payload', {})
+                        else:
+                            payload = {}
+                    else:
+                        # Direct format: payload is at top level
+                        payload = r.get('payload', {})
+
                     if isinstance(payload, dict):
                         round_info = payload.get('round', {})
                         if isinstance(round_info, dict):
@@ -333,7 +352,18 @@ class MiningRoundAnalyzer:
             for r in issuing_rounds:
                 # Validate each round is a dict before accessing fields
                 if isinstance(r, dict):
-                    payload = r.get('payload', {})
+                    # Handle both direct payload format and nested contract format
+                    if 'contract' in r:
+                        # Nested format: payload is under 'contract'
+                        contract = r.get('contract', {})
+                        if isinstance(contract, dict):
+                            payload = contract.get('payload', {})
+                        else:
+                            payload = {}
+                    else:
+                        # Direct format: payload is at top level
+                        payload = r.get('payload', {})
+
                     if isinstance(payload, dict):
                         round_info = payload.get('round', {})
                         if isinstance(round_info, dict):

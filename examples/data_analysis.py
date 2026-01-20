@@ -129,16 +129,22 @@ class SpliceDataAnalyzer:
                 return {}
 
             open_rounds = open_issuing.get('open_mining_rounds', [])
-            # Validate that open_rounds is a list
-            if not isinstance(open_rounds, list):
-                print(f"Warning: open_mining_rounds is not a list, got {type(open_rounds)}: {open_rounds}")
+            # Handle both list and dict formats (API may return dict with contract IDs as keys)
+            if isinstance(open_rounds, dict):
+                # Extract values from dict format
+                open_rounds = list(open_rounds.values())
+            elif not isinstance(open_rounds, list):
+                print(f"Warning: open_mining_rounds is not a list or dict, got {type(open_rounds)}")
                 open_rounds = []
 
             # Try both possible key names for issuing rounds
             issuing_rounds = open_issuing.get('issuing_mining_rounds', open_issuing.get('issuing_rounds', []))
-            # Validate that issuing_rounds is a list
-            if not isinstance(issuing_rounds, list):
-                print(f"Warning: issuing_rounds is not a list, got {type(issuing_rounds)}: {issuing_rounds}")
+            # Handle both list and dict formats
+            if isinstance(issuing_rounds, dict):
+                # Extract values from dict format
+                issuing_rounds = list(issuing_rounds.values())
+            elif not isinstance(issuing_rounds, list):
+                print(f"Warning: issuing_rounds is not a list or dict, got {type(issuing_rounds)}")
                 issuing_rounds = []
 
             # Get closed rounds
@@ -151,9 +157,12 @@ class SpliceDataAnalyzer:
             else:
                 # Try both possible key names for closed rounds
                 closed_rounds = closed.get('rounds', closed.get('closed_rounds', []))
-                # Validate that closed_rounds is a list
-                if not isinstance(closed_rounds, list):
-                    print(f"Warning: closed_rounds is not a list, got {type(closed_rounds)}: {closed_rounds}")
+                # Handle both list and dict formats
+                if isinstance(closed_rounds, dict):
+                    # Extract values from dict format
+                    closed_rounds = list(closed_rounds.values())
+                elif not isinstance(closed_rounds, list):
+                    print(f"Warning: closed_rounds is not a list or dict, got {type(closed_rounds)}")
                     closed_rounds = []
 
             analysis = {
@@ -169,7 +178,18 @@ class SpliceDataAnalyzer:
                 for r in open_rounds:
                     # Validate each round is a dict before accessing fields
                     if isinstance(r, dict):
-                        payload = r.get('payload', {})
+                        # Handle both direct payload format and nested contract format
+                        if 'contract' in r:
+                            # Nested format: payload is under 'contract'
+                            contract = r.get('contract', {})
+                            if isinstance(contract, dict):
+                                payload = contract.get('payload', {})
+                            else:
+                                payload = {}
+                        else:
+                            # Direct format: payload is at top level
+                            payload = r.get('payload', {})
+
                         if isinstance(payload, dict):
                             round_info = payload.get('round', {})
                             if isinstance(round_info, dict):
