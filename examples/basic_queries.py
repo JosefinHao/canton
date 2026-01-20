@@ -94,12 +94,12 @@ def main():
     print("="*60)
     try:
         validators = client.get_validator_licenses(limit=10)
-        print(f"Retrieved {len(validators.get('validators', []))} validators")
+        print(f"Retrieved {len(validators.get('validator_licenses', []))} validators")
 
-        for i, validator in enumerate(validators.get('validators', [])[:3], 1):
+        for i, validator in enumerate(validators.get('validator_licenses', [])[:3], 1):
             print(f"\nValidator {i}:")
-            print(f"  Validator: {validator.get('validator', 'N/A')}")
-            print(f"  Sponsored: {validator.get('sponsored', 'N/A')}")
+            print(f"  Contract ID: {validator.get('contract_id', 'N/A')}")
+            print(f"  Created At: {validator.get('created_at', 'N/A')}")
 
     except Exception as e:
         print(f"Error: {e}")
