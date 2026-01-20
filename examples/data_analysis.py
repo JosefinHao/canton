@@ -3,9 +3,6 @@ Data Analysis Examples for Splice Network On-Chain Data
 
 This script demonstrates how to analyze on-chain data retrieved from
 the Splice Network Scan API using pandas and visualization libraries.
-
-The Scan API is completely PUBLIC - no authentication required!
-Just provide the API URL and start analyzing on-chain data immediately.
 """
 
 import sys
@@ -125,6 +122,12 @@ class SpliceDataAnalyzer:
         try:
             # Get open and issuing rounds
             open_issuing = self.client.get_open_and_issuing_mining_rounds()
+
+            # Validate response type
+            if not isinstance(open_issuing, dict):
+                print(f"Warning: Expected dict, got {type(open_issuing)}: {open_issuing}")
+                return {}
+
             open_rounds = open_issuing.get('open_mining_rounds', [])
             # Try both possible key names for issuing rounds
             issuing_rounds = open_issuing.get('issuing_mining_rounds', open_issuing.get('issuing_rounds', []))
@@ -421,12 +424,9 @@ class SpliceDataAnalyzer:
 def main():
     """Run data analysis examples."""
 
-    # Configuration - Replace with your actual Splice Scan API URL
-    # No authentication required - the API is completely public!
     BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
-    # Initialize client - no authentication needed!
-    print("Initializing Splice Scan API client (no auth required!)...")
+    print("Initializing Splice Scan API client...")
     client = SpliceScanClient(base_url=BASE_URL)
 
     # Initialize analyzer

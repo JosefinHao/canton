@@ -17,9 +17,6 @@ from urllib3.util.retry import Retry
 class SpliceScanClient:
     """
     Client for interacting with Splice Network Scan API.
-
-    The Scan API is completely public and requires no authentication!
-    Simply provide the base URL and start querying on-chain data.
     """
 
     def __init__(
@@ -108,7 +105,19 @@ class SpliceScanClient:
             if response.status_code == 204 or not response.content:
                 return {}
 
-            return response.json()
+            # Parse JSON response
+            try:
+                result = response.json()
+                # Ensure we always return a dict, never a string or other type
+                if not isinstance(result, dict):
+                    print(f"Warning: API returned non-dict type: {type(result)}")
+                    print(f"Response content: {result}")
+                    return {}
+                return result
+            except ValueError as e:
+                print(f"JSON parsing error: {e}")
+                print(f"Response text: {response.text}")
+                return {}
 
         except requests.exceptions.HTTPError as e:
             print(f"HTTP Error: {e}")
