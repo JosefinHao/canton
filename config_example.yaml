@@ -1,11 +1,10 @@
 # Canton Scan API Configuration Example
-# The Scan API is completely PUBLIC - no authentication required!
 # This configuration file is OPTIONAL and only needed if you want to customize settings.
 
 # API Configuration
 api:
   # Base URL of the Scan API
-  # Default: https://scan.canton.network/api/v1 (public, no auth needed!)
+  # Default: https://scan.canton.network/api/v1
   base_url: "https://scan.canton.network/api/v1"
 
   # Request timeout in seconds
