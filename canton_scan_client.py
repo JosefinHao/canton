@@ -279,7 +279,14 @@ class SpliceScanClient:
                 'after_record_time': after_record_time
             }
 
-        return self._make_request('POST', '/v2/updates', json_data=json_data)
+        response = self._make_request('POST', '/v2/updates', json_data=json_data)
+
+        # Normalize response structure for backward compatibility
+        # New API returns {"transactions": [...]} but old code expects {"updates": [...]}
+        if 'transactions' in response and 'updates' not in response:
+            response['updates'] = response['transactions']
+
+        return response
 
     def get_update_by_id(
         self,
