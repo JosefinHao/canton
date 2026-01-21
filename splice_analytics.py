@@ -72,6 +72,8 @@ class TransactionAnalyzer:
 
                 updates = result.get('updates', [])
                 if not updates:
+                    if page == 0:
+                        print(f"  [Updates] No updates returned on first page. The ledger may be empty or the endpoint may require authentication.")
                     break
 
                 all_updates.extend(updates)
@@ -84,8 +86,15 @@ class TransactionAnalyzer:
                     break
 
             except Exception as e:
-                print(f"Error fetching page {page + 1}: {e}")
+                if page == 0:
+                    print(f"  [Updates] Error fetching updates: {e}")
+                    print(f"  [Updates] Error type: {type(e).__name__}")
+                else:
+                    print(f"  [Updates] Error fetching page {page + 1}: {e}")
                 break
+
+        if all_updates:
+            print(f"  [Updates] Successfully fetched {len(all_updates)} updates")
 
         return all_updates
 
@@ -742,26 +751,79 @@ class ValidatorAnalyzer:
     def get_validator_summary(self) -> Dict[str, Any]:
         """
         Get comprehensive validator network summary.
+        Tries multiple methods to retrieve validator data.
 
         Returns:
             Dictionary with validator statistics
         """
+        # Method 1: Try admin validator licenses endpoint
         try:
             validators = self.client.get_validator_licenses(limit=1000)
             validator_list = validators.get('validators', [])
 
-            sponsored = sum(1 for v in validator_list if v.get('sponsored'))
-            unsponsored = len(validator_list) - sponsored
+            if validator_list:
+                sponsored = sum(1 for v in validator_list if v.get('sponsored'))
+                unsponsored = len(validator_list) - sponsored
 
-            return {
-                'total_validators': len(validator_list),
-                'sponsored_count': sponsored,
-                'unsponsored_count': unsponsored,
-                'sponsorship_rate': (sponsored / len(validator_list) * 100) if validator_list else 0,
-                'validators': validator_list[:10]  # Sample of first 10
-            }
+                return {
+                    'total_validators': len(validator_list),
+                    'sponsored_count': sponsored,
+                    'unsponsored_count': unsponsored,
+                    'sponsorship_rate': (sponsored / len(validator_list) * 100) if validator_list else 0,
+                    'validators': validator_list[:10],  # Sample of first 10
+                    'method': 'validator_licenses'
+                }
         except Exception as e:
-            return {'error': str(e)}
+            print(f"  [Validator Method 1 Failed] get_validator_licenses: {e}")
+
+        # Method 2: Try top validators by faucets (non-admin endpoint)
+        try:
+            result = self.client.get_top_validators_by_validator_faucets(limit=1000)
+            validator_list = result.get('validatorsByReceivedFaucets', [])
+
+            if validator_list:
+                # This endpoint doesn't have 'sponsored' field, so we can't calculate that
+                return {
+                    'total_validators': len(validator_list),
+                    'sponsored_count': 0,
+                    'unsponsored_count': 0,
+                    'sponsorship_rate': 0,
+                    'validators': validator_list[:10],
+                    'method': 'top_validators_by_faucets',
+                    'note': 'Sponsorship data not available via this endpoint'
+                }
+        except Exception as e:
+            print(f"  [Validator Method 2 Failed] get_top_validators_by_validator_faucets: {e}")
+
+        # Method 3: Try getting SV node states from DSO
+        try:
+            dso_data = self.client.get_dso()
+            sv_states = dso_data.get('sv_node_states', {})
+
+            if sv_states:
+                count = len(sv_states) if isinstance(sv_states, (list, dict)) else 0
+                return {
+                    'total_validators': count,
+                    'sponsored_count': 0,
+                    'unsponsored_count': 0,
+                    'sponsorship_rate': 0,
+                    'validators': [],
+                    'method': 'dso_sv_node_states',
+                    'note': 'Showing SV node count (not validators)'
+                }
+        except Exception as e:
+            print(f"  [Validator Method 3 Failed] get_dso sv_node_states: {e}")
+
+        # All methods failed
+        return {
+            'total_validators': 0,
+            'sponsored_count': 0,
+            'unsponsored_count': 0,
+            'sponsorship_rate': 0,
+            'validators': [],
+            'error': 'All validator retrieval methods failed. Check API permissions or network connectivity.',
+            'error_details': 'Tried: validator_licenses (admin), top_validators_by_faucets, dso_sv_node_states'
+        }
 
     def analyze_validator_growth(
         self,
@@ -1119,18 +1181,32 @@ class NetworkHealthAnalyzer:
         lines.append("")
 
         # Transaction Activity
+        lines.append("TRANSACTION ACTIVITY")
+        lines.append("-" * 80)
         try:
             updates = self.tx_analyzer.fetch_updates_batch(max_pages=3)
-            tx_rate = self.tx_analyzer.calculate_transaction_rate(updates)
 
-            lines.append("TRANSACTION ACTIVITY")
-            lines.append("-" * 80)
-            lines.append(f"Recent Updates Analyzed: {tx_rate.get('total_updates', 0)}")
-            lines.append(f"Updates per Hour: {tx_rate.get('updates_per_hour', 0):.2f}")
-            lines.append(f"Updates per Day: {tx_rate.get('updates_per_day', 0):.2f}")
+            if not updates:
+                lines.append("Recent Updates Analyzed: 0")
+                lines.append("Updates per Hour: 0.00")
+                lines.append("Updates per Day: 0.00")
+                lines.append("")
+                lines.append("Note: No transaction data available. This could mean:")
+                lines.append("  - The ledger is empty (no transactions yet)")
+                lines.append("  - The /v2/updates endpoint requires authentication")
+                lines.append("  - There may be network/firewall restrictions")
+            else:
+                tx_rate = self.tx_analyzer.calculate_transaction_rate(updates)
+
+                if 'error' in tx_rate:
+                    lines.append(f"Error calculating rate: {tx_rate['error']}")
+                else:
+                    lines.append(f"Recent Updates Analyzed: {tx_rate.get('total_updates', 0)}")
+                    lines.append(f"Updates per Hour: {tx_rate.get('updates_per_hour', 0):.2f}")
+                    lines.append(f"Updates per Day: {tx_rate.get('updates_per_day', 0):.2f}")
             lines.append("")
         except Exception as e:
-            lines.append(f"Transaction Activity: Error - {e}")
+            lines.append(f"Error: {e}")
             lines.append("")
 
         # Mining Rounds
@@ -1148,17 +1224,30 @@ class NetworkHealthAnalyzer:
             lines.append("")
 
         # Validators
+        lines.append("VALIDATOR NETWORK")
+        lines.append("-" * 80)
         try:
             validators = self.validator_analyzer.get_validator_summary()
-            lines.append("VALIDATOR NETWORK")
-            lines.append("-" * 80)
+
             lines.append(f"Total Validators: {validators.get('total_validators', 0)}")
             lines.append(f"Sponsored: {validators.get('sponsored_count', 0)}")
             lines.append(f"Unsponsored: {validators.get('unsponsored_count', 0)}")
             lines.append(f"Sponsorship Rate: {validators.get('sponsorship_rate', 0):.1f}%")
+
+            # Show any notes or errors
+            if 'note' in validators:
+                lines.append(f"Note: {validators['note']}")
+            if 'method' in validators:
+                lines.append(f"Data source: {validators['method']}")
+            if 'error' in validators:
+                lines.append("")
+                lines.append(f"⚠ Error: {validators['error']}")
+                if 'error_details' in validators:
+                    lines.append(f"Details: {validators['error_details']}")
+
             lines.append("")
         except Exception as e:
-            lines.append(f"Validator Network: Error - {e}")
+            lines.append(f"Error: {e}")
             lines.append("")
 
         # ANS
