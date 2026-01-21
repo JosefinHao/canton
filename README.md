@@ -26,11 +26,12 @@ This client provides an easy-to-use interface for:
 - **Full Splice API Coverage**: Support for all Splice Scan API endpoints
 - **Update Tree Processing**: Proper preorder traversal of event trees with state accumulation
 - **Robust Error Handling**: Automatic retries and comprehensive error messages
-- **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, and ANS entries
+- **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, ANS entries, and featured app rewards
+- **Featured App Rewards Analysis**: Comprehensive tracking and visualization of AppRewardCoupon events
 - **Selective Event Parsing**: Filter events by template ID for efficient processing
 - **State Accumulation**: Track contracts, balances, mining rounds, and governance decisions
 - **Defensive Parsing**: Handle new fields and templates gracefully without breaking
-- **Visualization**: Generate charts and graphs from on-chain data
+- **Visualization**: Generate charts and graphs from on-chain data including reward progression and comparisons
 - **Pagination Support**: Efficient retrieval of large datasets
 - **Type Hints**: Full type annotations for better IDE support
 
@@ -472,9 +473,100 @@ print(report)
 - `generate_health_score()` - Composite 100-point health score
 - `generate_comprehensive_report()` - Full network health report
 
+**FeaturedAppRewardsAnalyzer**:
+- `fetch_and_process_rewards()` - Extract AppRewardCoupon events from ledger
+- `get_provider_stats()` - Statistics for specific featured app
+- `get_top_apps_by_rewards()` - Top apps by total rewards
+- `get_top_apps_by_activity()` - Top apps by rounds active
+- `get_rewards_timeline()` - Timeline of rewards by round
+- `generate_summary_report()` - Text summary report
+- `export_to_csv()` - Export raw reward data
+- `export_stats_to_csv()` - Export aggregated statistics
+
 **Utility Functions**:
 - `calculate_gini_coefficient()` - Wealth inequality metric
 - `export_to_csv()` - Export data to CSV files
+
+## Featured App Rewards Analysis
+
+Analyze featured app rewards by processing `AppRewardCoupon` contract creation events from the Canton ledger. This provides comprehensive insights into reward distribution, app performance, and ecosystem growth.
+
+### Quick Start - Command Line
+
+Run a complete analysis with visualizations:
+
+```bash
+python analyze_featured_app_rewards.py
+```
+
+This generates:
+- Summary report with top apps statistics
+- Individual progress charts for each top app
+- Comparison visualizations across apps
+- Ecosystem overview and heatmaps
+- CSV export of raw data and statistics
+
+### Quick Start - Programmatic
+
+```python
+from canton_scan_client import SpliceScanClient
+from featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
+from featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
+
+# Initialize
+client = SpliceScanClient(base_url="...")
+analyzer = FeaturedAppRewardsAnalyzer(client)
+
+# Fetch and process AppRewardCoupon events
+summary = analyzer.fetch_and_process_rewards(max_pages=100, page_size=100)
+print(f"Found {summary['rewards_found']} reward coupons for {summary['unique_apps']} apps")
+
+# Get top apps by total rewards
+top_apps = analyzer.get_top_apps_by_rewards(limit=10)
+for provider_id, stats in top_apps:
+    print(f"{provider_id}: {stats.total_rewards:,.2f} CC over {stats.rounds_active} rounds")
+
+# Generate visualizations
+visualizer = FeaturedAppRewardsVisualizer(analyzer)
+visualizer.generate_comprehensive_report(output_dir='rewards_report', top_apps_limit=10)
+
+# Export data
+analyzer.export_to_csv('rewards_data.csv')
+analyzer.export_stats_to_csv('app_statistics.csv')
+```
+
+### Visualization Types
+
+The Featured App Rewards system generates:
+
+1. **Individual Progress Charts** - Reward progression over mining rounds for each app
+2. **Top Apps Rankings** - Bar charts of top performers by rewards or activity
+3. **Timeline Comparisons** - Multi-app comparison charts (per-round and cumulative)
+4. **Ecosystem Overview** - Stacked area chart showing ecosystem composition
+5. **Rewards Heatmap** - Matrix view of rewards by app and round
+6. **Distribution Analysis** - Pie charts and histograms of reward distribution
+
+### Command-Line Options
+
+```bash
+# Quick analysis (10 pages, no visualizations)
+python analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+
+# Full analysis with CSV export
+python analyze_featured_app_rewards.py --export-csv --max-pages 200
+
+# Analyze top 20 apps in detail
+python analyze_featured_app_rewards.py --top-apps 20
+
+# Custom output directory
+python analyze_featured_app_rewards.py --output-dir my_analysis
+```
+
+### Documentation
+
+For comprehensive documentation, examples, and API reference, see:
+- [Featured App Rewards Analysis Guide](FEATURED_APP_REWARDS_GUIDE.md)
+- [Example Scripts](examples/featured_app_rewards_example.py)
 
 ## Data Analytics Insights
 
