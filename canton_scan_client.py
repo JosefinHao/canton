@@ -226,6 +226,24 @@ class SpliceScanClient:
         """
         return self._make_request('GET', '/v0/dso-sequencers')
 
+    def get_sv_bft_sequencers(self) -> Dict[str, Any]:
+        """
+        Retrieve Canton BFT sequencer configuration for this SV (internal endpoint).
+
+        Returns:
+            Dictionary containing BFT sequencer configuration
+        """
+        return self._make_request('GET', '/v0/sv-bft-sequencers')
+
+    def get_amulet_price_votes(self) -> Dict[str, Any]:
+        """
+        Retrieve a list of the latest amulet price votes (internal scan endpoint).
+
+        Returns:
+            Dictionary containing amulet price votes
+        """
+        return self._make_request('GET', '/v0/amulet-price/votes')
+
     # ========== Update History Queries ==========
 
     def get_updates(
@@ -344,6 +362,17 @@ class SpliceScanClient:
             json_data['templates'] = templates
 
         return self._make_request('POST', '/v0/state/acs', json_data=json_data)
+
+    def force_acs_snapshot(self) -> Dict[str, Any]:
+        """
+        Take a snapshot of the ACS at the current time.
+
+        Note: This endpoint is disabled in production environments.
+
+        Returns:
+            Dictionary containing snapshot information
+        """
+        return self._make_request('POST', '/v0/state/acs/force', json_data={})
 
     # ========== Holdings Queries ==========
 
@@ -637,6 +666,30 @@ class SpliceScanClient:
         """
         return self._make_request('GET', f'/v0/domains/{domain_id}/members/{member_id}/traffic-status')
 
+    def get_synchronizer_identities(self, domain_id_prefix: str) -> Dict[str, Any]:
+        """
+        Get synchronizer identities for a domain.
+
+        Args:
+            domain_id_prefix: The domain ID prefix to query
+
+        Returns:
+            Dictionary containing synchronizer identity information
+        """
+        return self._make_request('GET', f'/v0/synchronizer-identities/{domain_id_prefix}')
+
+    def get_synchronizer_bootstrapping_transactions(self, domain_id_prefix: str) -> Dict[str, Any]:
+        """
+        Get synchronizer bootstrapping transactions.
+
+        Args:
+            domain_id_prefix: The domain ID prefix to query
+
+        Returns:
+            Dictionary containing bootstrapping transaction information
+        """
+        return self._make_request('GET', f'/v0/synchronizer-bootstrapping-transactions/{domain_id_prefix}')
+
     # ========== Migration Queries ==========
 
     def get_migration_schedule(self) -> Dict[str, Any]:
@@ -647,6 +700,76 @@ class SpliceScanClient:
             Dictionary containing time and migration_id
         """
         return self._make_request('GET', '/v0/migrations/schedule')
+
+    # ========== Backfilling Queries ==========
+
+    def get_backfilling_migration_info(self, migration_id: int) -> Dict[str, Any]:
+        """
+        List all previous synchronizer migrations.
+
+        Args:
+            migration_id: Migration ID to query
+
+        Returns:
+            Dictionary containing migration information
+        """
+        json_data = {'migration_id': migration_id}
+        return self._make_request('POST', '/v0/backfilling/migration-info', json_data=json_data)
+
+    def get_backfilling_updates_before(
+        self,
+        migration_id: int,
+        synchronizer_id: Optional[str] = None,
+        before_timestamp: Optional[str] = None,
+        count: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Retrieve transactions and synchronizer reassignments prior to specification.
+
+        Args:
+            migration_id: Migration ID
+            synchronizer_id: Optional synchronizer ID filter
+            before_timestamp: Optional timestamp filter (ISO format)
+            count: Optional maximum number of results
+
+        Returns:
+            Dictionary containing updates before the specified criteria
+        """
+        json_data: Dict[str, Any] = {'migration_id': migration_id}
+
+        if synchronizer_id:
+            json_data['synchronizer_id'] = synchronizer_id
+        if before_timestamp:
+            json_data['before_timestamp'] = before_timestamp
+        if count is not None:
+            json_data['count'] = count
+
+        return self._make_request('POST', '/v0/backfilling/updates-before', json_data=json_data)
+
+    def get_backfilling_status(self) -> Dict[str, Any]:
+        """
+        Retrieve the status of the backfilling process.
+
+        Returns:
+            Dictionary containing backfilling status information
+        """
+        return self._make_request('GET', '/v0/backfilling/status')
+
+    def import_backfilling_updates(
+        self,
+        updates: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Import updates for backfilling (internal endpoint).
+
+        Args:
+            updates: List of update objects to import
+
+        Returns:
+            Dictionary containing import status
+        """
+        json_data = {'updates': updates}
+        return self._make_request('POST', '/v0/backfilling/import-updates', json_data=json_data)
 
     # ========== Featured Apps Queries ==========
 
@@ -721,6 +844,30 @@ class SpliceScanClient:
 
         return self._make_request('POST', '/v0/ans-rules', json_data=json_data)
 
+    def get_external_party_amulet_rules(
+        self,
+        cached_external_party_amulet_rules_contract_id: Optional[str] = None,
+        cached_external_party_amulet_rules_domain_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get external party amulet rules contract.
+
+        Args:
+            cached_external_party_amulet_rules_contract_id: Cached contract ID for efficiency
+            cached_external_party_amulet_rules_domain_id: Cached domain ID for efficiency
+
+        Returns:
+            Dictionary containing external_party_amulet_rules_update
+        """
+        json_data: Dict[str, Any] = {}
+
+        if cached_external_party_amulet_rules_contract_id:
+            json_data['cached_external_party_amulet_rules_contract_id'] = cached_external_party_amulet_rules_contract_id
+        if cached_external_party_amulet_rules_domain_id:
+            json_data['cached_external_party_amulet_rules_domain_id'] = cached_external_party_amulet_rules_domain_id
+
+        return self._make_request('POST', '/v0/external-party-amulet-rules', json_data=json_data)
+
     # ========== Vote Queries ==========
 
     def get_vote_requests_by_ids(
@@ -761,6 +908,22 @@ class SpliceScanClient:
             Dictionary containing dso_rules_vote_requests
         """
         return self._make_request('GET', '/v0/admin/sv/voterequests')
+
+    def get_vote_results(
+        self,
+        filter_params: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Query vote results with optional filter parameters.
+
+        Args:
+            filter_params: Optional filter parameters for vote results query
+
+        Returns:
+            Dictionary containing vote_results
+        """
+        json_data: Dict[str, Any] = filter_params or {}
+        return self._make_request('POST', '/v0/admin/sv/voteresults', json_data=json_data)
 
     # ========== Network Information ==========
 
