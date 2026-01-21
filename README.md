@@ -24,8 +24,12 @@ This client provides an easy-to-use interface for:
 ## Features
 
 - **Full Splice API Coverage**: Support for all Splice Scan API endpoints
+- **Update Tree Processing**: Proper preorder traversal of event trees with state accumulation
 - **Robust Error Handling**: Automatic retries and comprehensive error messages
 - **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, and ANS entries
+- **Selective Event Parsing**: Filter events by template ID for efficient processing
+- **State Accumulation**: Track contracts, balances, mining rounds, and governance decisions
+- **Defensive Parsing**: Handle new fields and templates gracefully without breaking
 - **Visualization**: Generate charts and graphs from on-chain data
 - **Pagination Support**: Efficient retrieval of large datasets
 - **Type Hints**: Full type annotations for better IDE support
@@ -117,6 +121,44 @@ with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync
     updates = client.get_updates(page_size=10)
     # Client automatically closes when exiting the context
 ```
+
+### Update Tree Processing (Recommended)
+
+For proper processing of updates with event tree traversal and state accumulation:
+
+```python
+from canton_scan_client import SpliceScanClient
+from update_tree_processor import UpdateTreeProcessor
+
+client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
+
+# Fetch updates
+updates_response = client.get_updates(page_size=100)
+updates = updates_response['updates']
+
+# Process updates with tree traversal
+processor = UpdateTreeProcessor()
+state = processor.process_updates(updates)
+
+# Get summary
+summary = processor.get_summary()
+print(f"Processed {summary['updates_processed']} updates")
+print(f"Tracked {summary['total_contracts']} contracts")
+
+# Access accumulated state
+contracts = processor.get_contract_states()
+balances = processor.get_balance_history()
+mining_rounds = processor.get_mining_rounds()
+governance = processor.get_governance_decisions()
+```
+
+**Key Features:**
+- ✅ Traverses update tree in preorder (root events first, then children)
+- ✅ Selectively parses events based on template IDs
+- ✅ Accumulates state for contracts, balances, mining rounds, and governance
+- ✅ Defensive parsing that handles new fields/templates gracefully
+
+See [UPDATE_TREE_PROCESSING.md](UPDATE_TREE_PROCESSING.md) for detailed documentation.
 
 ### Paginated Queries
 

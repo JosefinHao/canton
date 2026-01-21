@@ -16,6 +16,7 @@ import statistics
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from canton_scan_client import SpliceScanClient
+from update_tree_processor import UpdateTreeProcessor
 
 try:
     import pandas as pd
@@ -276,6 +277,53 @@ class TransactionAnalyzer:
             'older_daily_rate': older_rate,
             'growth_rate_percent': growth_rate,
             'period_days': period_days
+        }
+
+    def process_updates_with_tree_traversal(
+        self,
+        max_pages: int = 10,
+        page_size: int = 100,
+        filter_templates: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Process updates using proper tree traversal (preorder) and state accumulation.
+
+        This method:
+        1. Fetches updates from the API
+        2. Traverses the update tree in preorder (root events first, then children)
+        3. Selectively parses events based on template IDs
+        4. Accumulates state changes for contracts, balances, mining rounds, and governance
+        5. Uses defensive parsing to handle new fields and templates gracefully
+
+        Args:
+            max_pages: Maximum number of pages to fetch
+            page_size: Updates per page
+            filter_templates: Optional list of template patterns to filter on
+
+        Returns:
+            Dictionary containing:
+                - summary: Processing statistics
+                - contracts: Tracked contract states
+                - balances: Balance history by owner
+                - mining_rounds: Mining round states
+                - governance: Governance decisions
+                - processor: The processor instance for further queries
+        """
+        # Fetch updates
+        updates = self.fetch_updates_batch(max_pages=max_pages, page_size=page_size)
+
+        # Create processor and process updates
+        processor = UpdateTreeProcessor()
+        state = processor.process_updates(updates, filter_templates=filter_templates)
+
+        return {
+            'summary': processor.get_summary(),
+            'contracts': processor.get_contract_states(),
+            'active_contracts': processor.get_active_contracts(),
+            'balances': processor.get_balance_history(),
+            'mining_rounds': processor.get_mining_rounds(),
+            'governance': processor.get_governance_decisions(),
+            'processor': processor  # Return processor for advanced queries
         }
 
 
