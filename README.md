@@ -26,12 +26,14 @@ This client provides an easy-to-use interface for:
 - **Full Splice API Coverage**: Support for all Splice Scan API endpoints
 - **Update Tree Processing**: Proper preorder traversal of event trees with state accumulation
 - **Robust Error Handling**: Automatic retries and comprehensive error messages
-- **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, ANS entries, and featured app rewards
-- **Featured App Rewards Analysis**: Comprehensive tracking and visualization of AppRewardCoupon events
+- **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, ANS entries, featured app rewards, and validator rewards
+- **Rewards Analysis Systems**:
+  - **Featured App Rewards**: Track and visualize AppRewardCoupon events (ready for when feature launches)
+  - **Validator Rewards**: Comprehensive tracking and visualization of ValidatorRewardCoupon events
 - **Selective Event Parsing**: Filter events by template ID for efficient processing
 - **State Accumulation**: Track contracts, balances, mining rounds, and governance decisions
 - **Defensive Parsing**: Handle new fields and templates gracefully without breaking
-- **Visualization**: Generate charts and graphs from on-chain data including reward progression and comparisons
+- **Rich Visualizations**: Generate charts and graphs including reward progression, comparisons, heatmaps, and ecosystem overviews
 - **Pagination Support**: Efficient retrieval of large datasets
 - **Type Hints**: Full type annotations for better IDE support
 
@@ -567,6 +569,75 @@ python analyze_featured_app_rewards.py --output-dir my_analysis
 For comprehensive documentation, examples, and API reference, see:
 - [Featured App Rewards Analysis Guide](FEATURED_APP_REWARDS_GUIDE.md)
 - [Example Scripts](examples/featured_app_rewards_example.py)
+
+## Validator Rewards Analysis
+
+Analyze validator rewards by processing `ValidatorRewardCoupon` contract creation events from the Canton ledger. Track validator performance, reward distribution, and identify top-performing validators.
+
+### Quick Start - Command Line
+
+Run a complete analysis with visualizations:
+
+```bash
+python analyze_validator_rewards.py
+```
+
+This generates:
+- Summary report with top validator statistics
+- Individual progress charts for each top validator
+- Comparison visualizations across validators
+- Ecosystem overview and heatmaps
+- CSV export of raw data and statistics
+
+### Quick Start - Programmatic
+
+```python
+from canton_scan_client import SpliceScanClient
+from validator_rewards_analyzer import ValidatorRewardsAnalyzer
+from validator_rewards_visualizer import ValidatorRewardsVisualizer
+
+# Initialize
+client = SpliceScanClient(base_url="...")
+analyzer = ValidatorRewardsAnalyzer(client)
+
+# Fetch and process ValidatorRewardCoupon events
+summary = analyzer.fetch_and_process_rewards(max_pages=100, page_size=100)
+print(f"Found {summary['rewards_found']} reward coupons for {summary['unique_validators']} validators")
+
+# Get top validators by total rewards
+top_validators = analyzer.get_top_validators_by_rewards(limit=10)
+for validator_id, stats in top_validators:
+    print(f"{validator_id}: {stats.total_rewards:,.2f} CC over {stats.rounds_active} rounds")
+
+# Generate visualizations
+visualizer = ValidatorRewardsVisualizer(analyzer)
+visualizer.generate_comprehensive_report(output_dir='validator_report', top_apps_limit=10)
+
+# Export data
+analyzer.export_to_csv('validator_rewards.csv')
+analyzer.export_stats_to_csv('validator_statistics.csv')
+```
+
+### Command-Line Options
+
+```bash
+# Quick analysis (10 pages, no visualizations)
+python analyze_validator_rewards.py --max-pages 10 --no-visualizations
+
+# Full analysis with CSV export
+python analyze_validator_rewards.py --export-csv --max-pages 200
+
+# Analyze top 20 validators in detail
+python analyze_validator_rewards.py --top-validators 20
+
+# Custom output directory
+python analyze_validator_rewards.py --output-dir my_analysis
+```
+
+### Documentation
+
+For comprehensive documentation, examples, and API reference, see:
+- [Validator Rewards Analysis Guide](VALIDATOR_REWARDS_GUIDE.md)
 
 ## Data Analytics Insights
 
