@@ -801,6 +801,35 @@ class SpliceScanClient:
         """
         return self._make_request('GET', f'/v0/featured-apps/{provider_party_id}')
 
+    def get_round_party_totals(
+        self,
+        start_round: int,
+        end_round: int
+    ) -> Dict[str, Any]:
+        """
+        Retrieve per-party Amulet statistics for closed rounds.
+
+        This endpoint provides app_rewards, validator_rewards, and other metrics
+        per party per round, which is useful for analyzing reward distribution.
+
+        Args:
+            start_round: Starting round number (inclusive)
+            end_round: Ending round number (inclusive, max 50 rounds)
+
+        Returns:
+            Dictionary containing entries with per-party statistics including:
+            - app_rewards: Rewards for featured app providers
+            - validator_rewards: Rewards for validators
+            - cumulative_app_rewards: Cumulative app rewards
+            - cumulative_validator_rewards: Cumulative validator rewards
+            - And other traffic/holding fee metrics
+        """
+        json_data = {
+            'start_round': start_round,
+            'end_round': end_round
+        }
+        return self._make_request('POST', '/v0/round-party-totals', json_data=json_data)
+
     # ========== Amulet Rules Queries ==========
 
     def get_amulet_rules(
