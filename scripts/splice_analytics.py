@@ -1,8 +1,8 @@
 """
-Comprehensive Analytics Module for Splice Network On-Chain Data
+Analytics Module for Splice Network On-Chain Data
 
-This module provides extensive analysis capabilities for Splice Network data,
-organized into specialized analyzer classes for different domains.
+This module provides analysis capabilities for Splice Network data,
+organized into analyzer classes for different domains.
 """
 
 import sys
@@ -15,8 +15,8 @@ import statistics
 # Add parent directory to path to import the client
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from canton_scan_client import SpliceScanClient
-from update_tree_processor import UpdateTreeProcessor
+from src.canton_scan_client import SpliceScanClient
+from src.update_tree_processor import UpdateTreeProcessor
 
 try:
     import pandas as pd
@@ -346,7 +346,7 @@ class MiningRoundAnalyzer:
 
     def get_all_rounds_summary(self) -> Dict[str, Any]:
         """
-        Get comprehensive summary of all mining rounds.
+        Get summary of all mining rounds.
 
         Returns:
             Dictionary with mining round statistics
@@ -750,7 +750,7 @@ class ValidatorAnalyzer:
 
     def get_validator_summary(self) -> Dict[str, Any]:
         """
-        Get comprehensive validator network summary.
+        Get validator network summary.
         Tries multiple methods to retrieve validator data.
 
         Returns:
@@ -1087,10 +1087,10 @@ class GovernanceAnalyzer:
         }
 
 
-# ========== Comprehensive Network Health ==========
+# ========== Network Health ==========
 
 class NetworkHealthAnalyzer:
-    """Analyzer for overall network health metrics."""
+    """Analyzer for network health metrics."""
 
     def __init__(self, client: SpliceScanClient):
         self.client = client
@@ -1155,16 +1155,16 @@ class NetworkHealthAnalyzer:
             'timestamp': datetime.utcnow().isoformat()
         }
 
-    def generate_comprehensive_report(self) -> str:
+    def generate_report(self) -> str:
         """
-        Generate a comprehensive text report of network health.
+        Generate text report of network health.
 
         Returns:
             Formatted text report
         """
         lines = []
         lines.append("=" * 80)
-        lines.append("SPLICE NETWORK COMPREHENSIVE HEALTH REPORT")
+        lines.append("SPLICE NETWORK HEALTH REPORT")
         lines.append("=" * 80)
         lines.append(f"Generated: {datetime.utcnow().isoformat()}")
         lines.append("")
@@ -1326,12 +1326,12 @@ def main():
     # Initialize analyzers
     health_analyzer = NetworkHealthAnalyzer(client)
 
-    # Generate comprehensive report
+    # Generate report
     print("\n" + "=" * 80)
-    print("Generating Comprehensive Network Health Report...")
+    print("Generating Network Health Report...")
     print("=" * 80)
 
-    report = health_analyzer.generate_comprehensive_report()
+    report = health_analyzer.generate_report()
     print(report)
 
     # Save report

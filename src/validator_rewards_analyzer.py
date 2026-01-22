@@ -1,10 +1,10 @@
 """
 Validator Rewards Analyzer
 
-This module provides comprehensive analysis of validator rewards by processing
-ValidatorRewardCoupon contract creation events from the Canton ledger update stream.
+This module analyzes validator rewards by processing ValidatorRewardCoupon
+contract creation events from the Canton ledger update stream.
 
-Key Features:
+Features:
 - Extract reward data from ValidatorRewardCoupon creation events
 - Organize rewards by validator (party ID)
 - Track reward progression through mining rounds
@@ -18,7 +18,7 @@ from collections import defaultdict
 from datetime import datetime
 import logging
 
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

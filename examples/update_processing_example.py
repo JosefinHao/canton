@@ -15,8 +15,8 @@ from datetime import datetime
 # Add parent directory to path to import modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from canton_scan_client import SpliceScanClient
-from update_tree_processor import UpdateTreeProcessor
+from src.canton_scan_client import SpliceScanClient
+from src.update_tree_processor import UpdateTreeProcessor
 
 
 def main():

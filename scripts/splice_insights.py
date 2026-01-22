@@ -1,5 +1,5 @@
 """
-Advanced Insights & Visualization Module for Splice Network
+Insights & Visualization Module for Splice Network
 
 This module provides senior-level data science insights with comprehensive
 visualizations to answer critical business and operational questions.
@@ -23,7 +23,7 @@ import statistics
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 from splice_analytics import (
     TransactionAnalyzer,
     MiningRoundAnalyzer,
@@ -617,10 +617,10 @@ class GovernanceInsights:
         return interpretations.get(top_action, f"Primary focus: {top_action}")
 
 
-# ========== Comprehensive Visualization Suite ==========
+# ========== Visualization Suite ==========
 
 class InsightVisualizer:
-    """Create comprehensive visualizations of network insights."""
+    """Create visualizations of network insights."""
 
     def __init__(self, client: SpliceScanClient):
         self.client = client
@@ -635,7 +635,7 @@ class InsightVisualizer:
         output_file: str = 'splice_executive_dashboard.png'
     ):
         """
-        Create a comprehensive executive dashboard with key metrics.
+        Create a executive dashboard with key metrics.
 
         This is the "one pager" for executives - all critical insights at a glance.
         """
@@ -896,7 +896,7 @@ class InsightVisualizer:
 # ========== Main Demo ==========
 
 def main():
-    """Demonstrate advanced insights and visualizations."""
+    """Demonstrate insights and visualizations."""
 
     BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
@@ -961,7 +961,7 @@ def main():
     client.close()
 
     print("\n" + "=" * 80)
-    print(" INSIGHTS ANALYSIS COMPLETE")
+    print(" INSIGHTS ANALYSIS")
     print("=" * 80)
 
 

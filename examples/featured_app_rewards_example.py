@@ -9,8 +9,8 @@ programmatically for custom analysis workflows.
 import sys
 sys.path.append('..')
 
-from canton_scan_client import SpliceScanClient
-from featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
+from src.canton_scan_client import SpliceScanClient
+from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
 from featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
 
 

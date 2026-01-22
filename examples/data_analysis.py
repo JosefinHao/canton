@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 # Add parent directory to path to import the client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 try:
     import pandas as pd
@@ -400,7 +400,7 @@ class SpliceDataAnalyzer:
 
     def generate_summary_report(self) -> str:
         """
-        Generate a comprehensive summary report of the Splice Network.
+        Generate a summary report of the Splice Network.
 
         Returns:
             Formatted summary report as string
@@ -494,7 +494,7 @@ def main():
     print("\nReport saved to splice_summary_report.txt")
 
     if not ANALYSIS_AVAILABLE:
-        print("\nSkipping advanced analytics (pandas/matplotlib not installed)")
+        print("\nSkipping analytics (pandas/matplotlib not installed)")
         client.close()
         return
 

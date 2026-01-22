@@ -4,12 +4,12 @@ Debug version of splice analytics to diagnose data retrieval issues.
 """
 
 import sys
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
 def test_validators(client):
-    """Test validator data retrieval with detailed diagnostics."""
+    """Test validator data retrieval with diagnostics."""
     print("\n" + "=" * 80)
     print("TESTING VALIDATOR DATA")
     print("=" * 80)
@@ -81,7 +81,7 @@ def test_validators(client):
 
 
 def test_updates(client):
-    """Test transaction/update data retrieval with detailed diagnostics."""
+    """Test transaction/update data retrieval with diagnostics."""
     print("\n" + "=" * 80)
     print("TESTING TRANSACTION/UPDATE DATA")
     print("=" * 80)
