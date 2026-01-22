@@ -33,7 +33,7 @@ class FeaturedAppRewardsVisualizer:
         self,
         provider_party_id: str,
         output_file: Optional[str] = None,
-        show_coupons: bool = True
+        show_coupons: bool = False
     ) -> str:
         """
         Plot reward progression for a single featured app.
@@ -41,7 +41,7 @@ class FeaturedAppRewardsVisualizer:
         Args:
             provider_party_id: Provider party ID
             output_file: Optional output filename (defaults to provider_id_progress.png)
-            show_coupons: Whether to show coupon count as secondary axis
+            show_coupons: Whether to show cumulative rewards as secondary axis (deprecated in round-party-totals API)
 
         Returns:
             Output filename
@@ -53,7 +53,7 @@ class FeaturedAppRewardsVisualizer:
         # Prepare data
         rounds = sorted(stats.rewards_by_round.keys())
         rewards = [stats.rewards_by_round[r] for r in rounds]
-        coupons = [stats.coupons_by_round[r] for r in rounds] if show_coupons else None
+        cumulative = [stats.cumulative_by_round.get(r, 0) for r in rounds] if show_coupons else None
 
         # Create figure
         fig, ax1 = plt.subplots(figsize=(14, 7))
@@ -67,13 +67,13 @@ class FeaturedAppRewardsVisualizer:
         ax1.tick_params(axis='y', labelcolor=color1)
         ax1.grid(True, alpha=0.3)
 
-        # Plot coupons on secondary axis
-        if show_coupons and coupons:
+        # Plot cumulative rewards on secondary axis
+        if show_coupons and cumulative:
             ax2 = ax1.twinx()
             color2 = 'tab:orange'
-            ax2.set_ylabel('Reward Coupons Count', color=color2, fontsize=12)
-            line2 = ax2.plot(rounds, coupons, color=color2, linewidth=2, marker='s',
-                            markersize=4, linestyle='--', label='Coupon Count per Round')
+            ax2.set_ylabel('Cumulative Rewards (CC)', color=color2, fontsize=12)
+            line2 = ax2.plot(rounds, cumulative, color=color2, linewidth=2, marker='s',
+                            markersize=4, linestyle='--', label='Cumulative Rewards')
             ax2.tick_params(axis='y', labelcolor=color2)
 
             # Combine legends
@@ -91,9 +91,9 @@ class FeaturedAppRewardsVisualizer:
         # Add statistics text box
         stats_text = (
             f"Total Rewards: {stats.total_rewards:,.2f} CC\n"
-            f"Total Coupons: {stats.total_coupons:,}\n"
+            f"Rounds with Rewards: {stats.total_coupons:,}\n"
             f"Rounds Active: {stats.rounds_active}\n"
-            f"Avg per Coupon: {stats.avg_reward_per_coupon:.2f} CC"
+            f"Avg per Round: {stats.avg_reward_per_round:.2f} CC"
         )
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
         ax1.text(0.98, 0.97, stats_text, transform=ax1.transAxes, fontsize=10,
