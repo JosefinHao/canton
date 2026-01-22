@@ -5,6 +5,19 @@ Featured App Rewards Analysis Script
 This script analyzes featured app rewards from the Canton ledger using the
 round-party-totals API endpoint.
 
+About Featured App Rewards (from Canton Coin Whitepaper):
+    - Featured apps can mint up to 100x more Canton Coin than fees burned by users
+    - Featured apps receive $1 additional activity weight per Canton Coin transaction
+    - Unfeatured apps can only mint up to 80% (0.8x) of fees back
+    - Actual rewards depend on:
+      * Minting curve allocation for each round
+      * Competition from other apps in the same round
+      * Minting caps (cap_fa=100.0 for featured, cap_ua=0.6 for unfeatured)
+
+    Reference: https://www.canton.network/hubfs/Canton%20Network%20Files/Documents%20
+               (whitepapers,%20etc...)/Canton%20Coin_%20A%20Canton-Network-native%20
+               payment%20application.pdf
+
 Usage:
     python analyze_featured_app_rewards.py [options]
 
@@ -122,7 +135,15 @@ def main():
     print("=" * 80)
     print("FEATURED APP REWARDS ANALYSIS")
     print("=" * 80)
-    print(f"\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print()
+    print("About Featured App Rewards:")
+    print("  - Featured apps can mint up to 100x more Canton Coin than fees burned")
+    print("  - Featured apps get $1 additional activity weight per CC transaction")
+    print("  - Unfeatured apps can only mint up to 80% (0.8x) of fees back")
+    print("  - Rewards depend on minting curve, round allocation, and competition")
+    print("  - See Canton Coin whitepaper for full details")
+    print()
+    print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"API URL: {args.url}")
     print(f"Start Round: {args.start_round}")
     print(f"End Round: {args.end_round if args.end_round else 'auto-detect'}")
@@ -266,6 +287,34 @@ def main():
         print(f"  - app_XX_*_progress.png     : Individual progress (top {args.top_apps})")
 
     print("\n" + "=" * 80)
+    print("UNDERSTANDING THE REWARDS")
+    print("=" * 80)
+    print()
+    print("How to interpret the rewards data:")
+    print()
+    print("1. Featured vs Unfeatured Apps:")
+    print("   - Featured apps: Can mint up to 100x fees burned (cap_fa = 100.0)")
+    print("   - Unfeatured apps: Can mint up to 0.8x fees burned (cap_ua = 0.6)")
+    print()
+    print("2. Activity Weight Bonus:")
+    print("   - Featured apps get $1 additional weight per Canton Coin transaction")
+    print("   - This bonus increases their share of the minting pool")
+    print()
+    print("3. Actual vs Potential Rewards:")
+    print("   - Potential = activity weight × cap (up to 100x for featured apps)")
+    print("   - Actual = proportional share of round's application minting pool")
+    print("   - Depends on: minting curve, round allocation, competition from other apps")
+    print()
+    print("4. Minting Curve Over Time:")
+    print("   - Years 0-0.5: 15% to apps, 80% to SVs")
+    print("   - Years 0.5-1.5: 40% to apps, 48% to SVs")
+    print("   - Years 1.5-5: 62% to apps, 20% to SVs")
+    print("   - Years 5-10: 69% to apps, 10% to SVs")
+    print("   - Years 10+: 75% to apps, 5% to SVs")
+    print()
+    print("See Canton Coin whitepaper for full details on the reward mechanism.")
+    print()
+    print("=" * 80)
     print()
 
     return 0
