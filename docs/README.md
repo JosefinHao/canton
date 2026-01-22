@@ -772,16 +772,3 @@ Contributions are welcome! Please follow these guidelines:
 3. Include docstrings for public methods
 4. Add tests for new features
 5. Update documentation as needed
-
-## License
-
-[Add your license information here]
-
-## Support
-
-For issues and questions:
-
-- Splice Network Documentation: https://docs.splice.global/
-- GitHub Issues: [Add your repository URL]
-- Email: [Add support email]
-
