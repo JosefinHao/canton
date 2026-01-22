@@ -30,7 +30,7 @@ def example_basic_analysis():
     # Fetch and process data (limit to 50 rounds for quick example)
     summary = analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
-    print(f"Fetched {summary['rounds_fetched']} rounds")
+    print(f"Fetched {summary['entries_fetched']} entries from {summary['batches_fetched']} batches")
     print(f"Found {summary['rewards_found']} reward records")
     print(f"Unique apps: {summary['unique_apps']}")
     print()
