@@ -10,6 +10,39 @@ This guide explains how to analyze featured app rewards from the Canton ledger b
 4. **Visualizations** - Generate charts showing individual progress and comparisons
 5. **Export Capabilities** - Export data to CSV for further analysis
 
+## Reward Mechanism
+
+Featured app rewards are part of Canton Coin's incentive system designed to reward applications that provide value to the network.
+
+### How Featured App Rewards Work
+
+Based on the [Canton Coin Whitepaper](https://www.canton.network/hubfs/Canton%20Network%20Files/Documents%20(whitepapers,%20etc...)/Canton%20Coin_%20A%20Canton-Network-native%20payment%20application.pdf):
+
+**Featured vs Unfeatured Applications:**
+- All applications start as "unfeatured" with capped reward potential
+- Super Validators can mark an app as "featured" via ⅔ majority vote
+- **Featured apps** can mint up to **100x more Canton Coin** than was burned as fees
+- **Unfeatured apps** can only mint up to **80% (0.8x)** of fees back
+
+**Activity Weight Calculation:**
+- When users burn Canton Coin fees using an application, activity records are created
+- Featured apps receive **$1 additional weight** for every Canton Coin transaction they facilitate
+- At launch, first featured app earns minimum **$100 worth** of Canton Coin per transaction
+
+**Minting Process:**
+- Each 10-minute round has a tranche of Canton Coin available for minting
+- Application pool is split among app providers proportional to their activity weights
+- Actual rewards depend on:
+  * Minting curve allocation (changes over time - see whitepaper Figure 4)
+  * Total competition from other apps in the round
+  * Minting caps (cap_fa = 100.0 for featured, cap_ua = 0.6 for unfeatured)
+
+**Example:**
+If a featured app facilitates a $1000 Canton Coin transfer with $1.96 in fees burned:
+- Activity record weight = $1.93 (fees) + $1.00 (featured bonus) = $2.93
+- Potential mint = up to $2.93 × 100 = $293 worth of Canton Coin
+- Actual mint depends on round allocation and competition
+
 ## Table of Contents
 
 - [Quick Start](#quick-start)
