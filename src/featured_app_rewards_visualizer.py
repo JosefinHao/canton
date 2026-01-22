@@ -12,7 +12,7 @@ from datetime import datetime
 import numpy as np
 from collections import defaultdict
 
-from featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer, AppRewardStats
+from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer, AppRewardStats
 
 
 class FeaturedAppRewardsVisualizer:
