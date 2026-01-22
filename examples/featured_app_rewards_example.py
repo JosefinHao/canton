@@ -253,8 +253,8 @@ if __name__ == '__main__':
         # Optional: Run export and visualization examples
         # (Commented out by default to avoid creating files)
 
-        # example_export_data()
-        # example_generate_visualizations()
+        example_export_data()
+        example_generate_visualizations()
 
         print("\n" + "=" * 80)
         print("All examples completed successfully!")
