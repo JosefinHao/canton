@@ -27,11 +27,11 @@ def example_basic_analysis():
     # Create analyzer
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
-    # Fetch and process data (limit to 10 pages for quick example)
-    summary = analyzer.fetch_and_process_rewards(max_pages=10, page_size=100)
+    # Fetch and process data (limit to 50 rounds for quick example)
+    summary = analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
-    print(f"Fetched {summary['updates_fetched']} updates")
-    print(f"Found {summary['rewards_found']} reward coupons")
+    print(f"Fetched {summary['rounds_fetched']} rounds")
+    print(f"Found {summary['rewards_found']} reward records")
     print(f"Unique apps: {summary['unique_apps']}")
     print()
 
@@ -57,7 +57,7 @@ def example_specific_app_analysis():
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
     # Fetch data
-    analyzer.fetch_and_process_rewards(max_pages=10, page_size=100)
+    analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
     # Get a specific app (use the first one we find)
     all_stats = analyzer.get_all_stats()
@@ -74,15 +74,14 @@ def example_specific_app_analysis():
     print(f"First Round: {stats.first_round}")
     print(f"Last Round: {stats.last_round}")
     print(f"Rounds Active: {stats.rounds_active}")
-    print(f"Average per Coupon: {stats.avg_reward_per_coupon:.2f} CC")
+    print(f"Average per Round: {stats.avg_reward_per_round:.2f} CC")
     print()
 
     # Show rewards by round
     print("Rewards by Round:")
     for round_num in sorted(stats.rewards_by_round.keys())[:10]:  # First 10 rounds
         amount = stats.rewards_by_round[round_num]
-        coupons = stats.coupons_by_round[round_num]
-        print(f"  Round {round_num}: {amount:,.2f} CC ({coupons} coupons)")
+        print(f"  Round {round_num}: {amount:,.2f} CC")
 
 
 def example_generate_visualizations():
@@ -97,7 +96,7 @@ def example_generate_visualizations():
 
     # Fetch data
     print("Fetching data...")
-    analyzer.fetch_and_process_rewards(max_pages=10, page_size=100)
+    analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
     if len(analyzer.get_all_stats()) == 0:
         print("No apps found in data")
@@ -147,7 +146,7 @@ def example_export_data():
 
     # Fetch data
     print("Fetching data...")
-    analyzer.fetch_and_process_rewards(max_pages=10, page_size=100)
+    analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
     # Export to CSV
     print("\nExporting data...")
@@ -168,24 +167,24 @@ def example_custom_analysis():
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
     # Fetch data
-    analyzer.fetch_and_process_rewards(max_pages=10, page_size=100)
+    analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
     all_stats = analyzer.get_all_stats()
     if not all_stats:
         print("No apps found in data")
         return
 
-    # Custom analysis: Find apps with highest average reward per coupon
+    # Custom analysis: Find apps with highest average reward per round
     apps_by_avg = sorted(
         all_stats.items(),
-        key=lambda x: x[1].avg_reward_per_coupon,
+        key=lambda x: x[1].avg_reward_per_round,
         reverse=True
     )
 
-    print("Top 5 Apps by Average Reward per Coupon:")
+    print("Top 5 Apps by Average Reward per Round:")
     for i, (provider_id, stats) in enumerate(apps_by_avg[:5], 1):
         print(f"{i}. {provider_id[:60]}")
-        print(f"   Avg per Coupon: {stats.avg_reward_per_coupon:.2f} CC")
+        print(f"   Avg per Round: {stats.avg_reward_per_round:.2f} CC")
         print(f"   Total Coupons: {stats.total_coupons:,}")
         print(f"   Total Rewards: {stats.total_rewards:,.2f} CC")
         print()
@@ -213,7 +212,7 @@ def example_timeline_analysis():
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
     # Fetch data
-    analyzer.fetch_and_process_rewards(max_pages=10, page_size=100)
+    analyzer.fetch_and_process_rewards(start_round=1, max_rounds=50)
 
     # Get rewards timeline
     timeline = analyzer.get_rewards_timeline()
