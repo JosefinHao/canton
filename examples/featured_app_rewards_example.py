@@ -11,7 +11,7 @@ sys.path.append('..')
 
 from src.canton_scan_client import SpliceScanClient
 from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
-from featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
+from src.featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
 
 
 def example_basic_analysis():
