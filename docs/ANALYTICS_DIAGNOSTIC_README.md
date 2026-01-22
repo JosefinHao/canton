@@ -44,7 +44,7 @@ The original code caught exceptions and returned error dictionaries, but the cal
 
 ### 2. Diagnostic Tool (`splice_analytics_debug.py`)
 
-A comprehensive diagnostic script that tests all endpoints and shows exactly what's failing.
+A diagnostic script that tests all endpoints and shows exactly what's failing.
 
 **Usage:**
 ```bash
@@ -150,7 +150,7 @@ python splice_analytics.py
 
 ## Additional Notes
 
-- The diagnostic script provides the most detailed information
+- The diagnostic script provides information
 - All three scripts use the same `canton_scan_client.py` client
 - Check the API documentation for your specific Splice network deployment
 - Some endpoints may behave differently in testnet vs. mainnet
@@ -158,7 +158,7 @@ python splice_analytics.py
 ## Files in This Package
 
 - `splice_analytics.py` - Main analytics script (IMPROVED with better errors)
-- `splice_analytics_debug.py` - Comprehensive diagnostic tool (NEW)
+- `splice_analytics_debug.py` - Diagnostic tool (NEW)
 - `test_endpoints.py` - Basic endpoint tests
 - `test_alternative_endpoints.py` - Alternative endpoint tests
 - `canton_scan_client.py` - API client library

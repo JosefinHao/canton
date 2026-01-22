@@ -259,7 +259,7 @@ if summary['errors_encountered'] > 0:
     print("Errors:", processor.state.errors_encountered)
 ```
 
-## Advanced Usage
+## Usage
 
 ### Accessing Processor State
 
@@ -328,9 +328,9 @@ print(processor.get_summary())
 
 3. **API Rate Limits**: Respect Canton Scan API rate limits when fetching updates
 
-## Complete Example
+## Example
 
-See `examples/update_processing_example.py` for a complete working example that demonstrates:
+See `examples/update_processing_example.py` for a working example that demonstrates:
 
 - Basic update processing
 - Filtered processing by template

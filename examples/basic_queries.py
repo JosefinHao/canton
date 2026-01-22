@@ -12,7 +12,7 @@ from datetime import datetime
 # Add parent directory to path to import the client
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 
 def main():

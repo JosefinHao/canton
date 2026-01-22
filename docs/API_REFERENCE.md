@@ -1,6 +1,6 @@
-# Splice Scan API Client - Complete API Reference
+# Splice Scan API Client - API Reference
 
-This document provides a comprehensive reference of all available endpoints in the `SpliceScanClient` Python library, organized by functional area.
+This document provides a reference of all available endpoints in the `SpliceScanClient` Python library, organized by functional area.
 
 ## Table of Contents
 
@@ -427,10 +427,10 @@ This document provides a comprehensive reference of all available endpoints in t
 - v2 endpoints: 2 endpoints (updates)
 
 **Coverage:**
-- Core operations: ✅ Complete
-- Administrative operations: ✅ Complete
-- Backfilling operations: ✅ Complete
-- Internal operations: ✅ Complete
+- Core operations: ✅ 
+- Administrative operations: ✅ 
+- Backfilling operations: ✅ 
+- Internal operations: ✅ 
 - Deprecated endpoints: ❌ Correctly not implemented
 
 This implementation provides 100% coverage of all non-deprecated endpoints from the official Scan Open API specification.

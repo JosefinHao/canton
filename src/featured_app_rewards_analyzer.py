@@ -1,10 +1,9 @@
 """
 Featured App Rewards Analyzer
 
-This module provides comprehensive analysis of featured app rewards using the
-round-party-totals API endpoint.
+This module analyzes featured app rewards using the round-party-totals API endpoint.
 
-Key Features:
+Features:
 - Extract reward data from round-party-totals API
 - Organize rewards by featured app (provider party ID)
 - Track reward progression through mining rounds
@@ -18,7 +17,7 @@ from collections import defaultdict
 from datetime import datetime
 import logging
 
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

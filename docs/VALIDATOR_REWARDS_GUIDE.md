@@ -1,13 +1,13 @@
-# Featured App Rewards Analysis Guide
+# Validator Rewards Analysis Guide
 
 ## Overview
 
-This guide explains how to analyze featured app rewards from the Canton ledger by processing `AppRewardCoupon` contract creation events from the update stream. The analysis system provides:
+This guide explains how to analyze validator rewards from the Canton ledger by processing `ValidatorRewardCoupon` contract creation events from the update stream. The analysis system provides:
 
-1. **Comprehensive Data Extraction** - Retrieve all AppRewardCoupon events from the ledger
-2. **Systematic Organization** - Group rewards by featured app (provider party ID)
+1. **Data Extraction** - Retrieve all ValidatorRewardCoupon events from the ledger
+2. **Systematic Organization** - Group rewards by validator (validator party ID)
 3. **Statistical Analysis** - Calculate metrics and progress for each app
-4. **Rich Visualizations** - Generate charts showing individual progress and comparisons
+4. **Visualizations** - Generate charts showing individual progress and comparisons
 5. **Export Capabilities** - Export data to CSV for further analysis
 
 ## Table of Contents
@@ -26,17 +26,17 @@ This guide explains how to analyze featured app rewards from the Canton ledger b
 
 ### Basic Analysis
 
-Run a complete analysis with default settings:
+Run analysis with default settings:
 
 ```bash
-python analyze_featured_app_rewards.py
+python analyze_validator_rewards.py
 ```
 
 This will:
 1. Fetch up to 100 pages of updates from the ledger
-2. Extract all AppRewardCoupon creation events
-3. Calculate statistics for each featured app
-4. Generate comprehensive visualizations
+2. Extract all ValidatorRewardCoupon creation events
+3. Calculate statistics for each validator
+4. Generate visualizations
 5. Create a summary report
 
 ### Quick Analysis (First 10 Pages)
@@ -44,37 +44,37 @@ This will:
 For faster analysis during development or testing:
 
 ```bash
-python analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+python analyze_validator_rewards.py --max-pages 10 --no-visualizations
 ```
 
-### Full Analysis with CSV Export
+### Analysis with CSV Export
 
 ```bash
-python analyze_featured_app_rewards.py --export-csv --output-dir my_report
+python analyze_validator_rewards.py --export-csv --output-dir my_report
 ```
 
 ## Architecture
 
 ### System Components
 
-The featured app rewards analysis system consists of three main components:
+The validator rewards analysis system consists of three main components:
 
-1. **FeaturedAppRewardsAnalyzer** (`featured_app_rewards_analyzer.py`)
+1. **ValidatorRewardsAnalyzer** (`validator_rewards_analyzer.py`)
    - Fetches updates from Canton ledger
-   - Traverses event trees to find AppRewardCoupon creation events
+   - Traverses event trees to find ValidatorRewardCoupon creation events
    - Extracts reward data (amount, weight, provider, round)
    - Calculates statistics and aggregations
 
-2. **FeaturedAppRewardsVisualizer** (`featured_app_rewards_visualizer.py`)
-   - Generates individual app progress charts
+2. **ValidatorRewardsVisualizer** (`validator_rewards_visualizer.py`)
+   - Generates individual validator progress charts
    - Creates comparison visualizations
    - Produces ecosystem overview charts
    - Exports publication-quality figures
 
-3. **Main Analysis Script** (`analyze_featured_app_rewards.py`)
+3. **Main Analysis Script** (`analyze_validator_rewards.py`)
    - Provides command-line interface
    - Orchestrates the analysis workflow
-   - Generates comprehensive reports
+   - Generates reports
 
 ### Data Flow
 
@@ -85,7 +85,7 @@ Update Stream (via get_updates API)
     ↓
 Event Tree Traversal
     ↓
-AppRewardCoupon Creation Events
+ValidatorRewardCoupon Creation Events
     ↓
 Data Extraction & Aggregation
     ↓
@@ -96,13 +96,13 @@ Visualizations & Reports
 
 ## Data Model
 
-### AppRewardCoupon Event Structure
+### ValidatorRewardCoupon Event Structure
 
-AppRewardCoupon contracts are created on the Canton ledger with the following data:
+ValidatorRewardCoupon contracts are created on the Canton ledger with the following data:
 
 ```json
 {
-  "template_id": "*.AppRewardCoupon",
+  "template_id": "*.ValidatorRewardCoupon",
   "contract_id": "...",
   "create_arguments": {
     "provider": "party_id",
@@ -113,31 +113,31 @@ AppRewardCoupon contracts are created on the Canton ledger with the following da
 }
 ```
 
-### AppRewardRecord
+### ValidatorRewardRecord
 
-Each reward coupon is stored as an `AppRewardRecord`:
+Each reward coupon is stored as an `ValidatorRewardRecord`:
 
 ```python
 @dataclass
-class AppRewardRecord:
-    provider_party_id: str      # Featured app provider
+class ValidatorRewardRecord:
+    validator_party_id: str      # Validator provider
     round_number: int            # Mining round number
     amount: float                # Reward amount in CC
     weight: float                # App weight/priority
     contract_id: str             # Contract identifier
     record_time: str             # Timestamp
     event_id: str                # Event identifier
-    payload: Dict[str, Any]      # Full payload
+    payload: Dict[str, Any]      # Payload
 ```
 
-### AppRewardStats
+### ValidatorRewardStats
 
 Aggregated statistics for each app:
 
 ```python
 @dataclass
-class AppRewardStats:
-    provider_party_id: str
+class ValidatorRewardStats:
+    validator_party_id: str
     total_rewards: float         # Total CC earned
     total_coupons: int           # Number of coupons
     total_weight: float          # Sum of weights
@@ -156,7 +156,7 @@ class AppRewardStats:
 ### Basic Options
 
 ```bash
-python analyze_featured_app_rewards.py [OPTIONS]
+python analyze_validator_rewards.py [OPTIONS]
 ```
 
 ### Available Options
@@ -166,8 +166,8 @@ python analyze_featured_app_rewards.py [OPTIONS]
 | `--url URL` | `https://scan.sv-1.dev.global...` | Splice Scan API base URL |
 | `--max-pages N` | `100` | Maximum pages to fetch |
 | `--page-size N` | `100` | Updates per page |
-| `--output-dir DIR` | `featured_app_rewards_report` | Output directory |
-| `--top-apps N` | `10` | Number of top apps to analyze |
+| `--output-dir DIR` | `validator_rewards_report` | Output directory |
+| `--top-apps N` | `10` | Number of top validators to analyze |
 | `--no-visualizations` | Off | Skip generating charts |
 | `--export-csv` | Off | Export data to CSV |
 | `--verbose` | Off | Enable verbose logging |
@@ -177,7 +177,7 @@ python analyze_featured_app_rewards.py [OPTIONS]
 #### 1. Default Analysis
 
 ```bash
-python analyze_featured_app_rewards.py
+python analyze_validator_rewards.py
 ```
 
 Fetches 100 pages, generates all visualizations, creates summary report.
@@ -185,13 +185,13 @@ Fetches 100 pages, generates all visualizations, creates summary report.
 #### 2. Quick Preview (10 Pages, No Charts)
 
 ```bash
-python analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+python analyze_validator_rewards.py --max-pages 10 --no-visualizations
 ```
 
-#### 3. Full Analysis with Data Export
+#### 3. Analysis with Data Export
 
 ```bash
-python analyze_featured_app_rewards.py \
+python analyze_validator_rewards.py \
     --max-pages 200 \
     --export-csv \
     --output-dir full_analysis_2024
@@ -200,13 +200,13 @@ python analyze_featured_app_rewards.py \
 #### 4. Analyze Top 20 Apps
 
 ```bash
-python analyze_featured_app_rewards.py --top-apps 20
+python analyze_validator_rewards.py --top-apps 20
 ```
 
 #### 5. Custom API Endpoint
 
 ```bash
-python analyze_featured_app_rewards.py \
+python analyze_validator_rewards.py \
     --url https://custom.api.url/api/scan/ \
     --max-pages 50
 ```
@@ -216,16 +216,16 @@ python analyze_featured_app_rewards.py \
 After running the analysis, the following files are generated:
 
 ```
-featured_app_rewards_report/
+validator_rewards_report/
 ├── summary_report.txt              # Text summary
-├── top_apps_rewards.png            # Top apps by rewards
-├── top_apps_activity.png           # Top apps by activity
+├── top_apps_rewards.png            # Top validators by rewards
+├── top_apps_activity.png           # Top validators by activity
 ├── ecosystem_overview.png          # Stacked area chart
 ├── rewards_heatmap.png             # Heatmap by app/round
 ├── reward_distribution.png         # Distribution analysis
 ├── timeline_per_round.png          # Per-round comparison
 ├── timeline_cumulative.png         # Cumulative comparison
-├── app_01_*_progress.png           # Individual app charts
+├── app_01_*_progress.png           # Individual validator charts
 ├── app_02_*_progress.png
 ├── ...
 ├── rewards_data.csv                # Raw data (if --export-csv)
@@ -238,7 +238,7 @@ featured_app_rewards_report/
 
 ```python
 from canton_scan_client import SpliceScanClient
-from featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
+from validator_rewards_analyzer import ValidatorRewardsAnalyzer
 
 # Initialize client
 client = SpliceScanClient(
@@ -246,7 +246,7 @@ client = SpliceScanClient(
 )
 
 # Create analyzer
-analyzer = FeaturedAppRewardsAnalyzer(client)
+analyzer = ValidatorRewardsAnalyzer(client)
 
 # Fetch and process data
 summary = analyzer.fetch_and_process_rewards(
@@ -257,7 +257,7 @@ summary = analyzer.fetch_and_process_rewards(
 print(f"Found {summary['rewards_found']} reward coupons")
 print(f"Unique apps: {summary['unique_apps']}")
 
-# Get top apps
+# Get top validators
 top_apps = analyzer.get_top_apps_by_rewards(limit=10)
 for provider_id, stats in top_apps:
     print(f"{provider_id}: {stats.total_rewards:,.2f} CC")
@@ -283,10 +283,10 @@ if stats:
 ### Generating Visualizations
 
 ```python
-from featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
+from validator_rewards_visualizer import ValidatorRewardsVisualizer
 
 # Create visualizer
-visualizer = FeaturedAppRewardsVisualizer(analyzer)
+visualizer = ValidatorRewardsVisualizer(analyzer)
 
 # Generate specific charts
 visualizer.plot_top_apps_comparison(
@@ -300,14 +300,14 @@ visualizer.plot_ecosystem_overview(
     top_n=20
 )
 
-# Generate individual app progress
+# Generate individual validator progress
 visualizer.plot_app_progress(
-    provider_party_id="...",
+    validator_party_id="...",
     output_file='app_progress.png',
     show_coupons=True
 )
 
-# Generate comprehensive report
+# Generate report
 output_files = visualizer.generate_comprehensive_report(
     output_dir='my_report',
     top_apps_limit=15
@@ -327,7 +327,7 @@ analyzer.export_stats_to_csv('stats.csv')
 ### Custom Analysis
 
 ```python
-# Get all app statistics
+# Get all validator statistics
 all_stats = analyzer.get_all_stats()
 
 # Custom analysis: Find apps with highest average
@@ -348,7 +348,7 @@ for round_num, providers in sorted(timeline.items()):
 
 ### 1. Top Apps by Rewards (Bar Chart)
 
-Shows the top N featured apps ranked by total rewards earned.
+Shows the top N validators ranked by total rewards earned.
 
 **File**: `top_apps_rewards.png`
 
@@ -357,11 +357,11 @@ Shows the top N featured apps ranked by total rewards earned.
 - Value labels on each bar
 - Colorful gradient coloring
 
-**Use Case**: Identify the most successful featured apps by total earnings.
+**Use Case**: Identify the most successful validators by total earnings.
 
 ### 2. Top Apps by Activity (Bar Chart)
 
-Shows the top N featured apps ranked by number of rounds active.
+Shows the top N validators ranked by number of rounds active.
 
 **File**: `top_apps_activity.png`
 
@@ -369,7 +369,7 @@ Shows the top N featured apps ranked by number of rounds active.
 - Shows consistency and longevity
 - Identifies long-term contributors
 
-**Use Case**: Find the most consistent and long-lasting featured apps.
+**Use Case**: Find the most consistent and long-lasting validators.
 
 ### 3. Individual App Progress (Line Chart)
 
@@ -401,7 +401,7 @@ Compares multiple apps' reward progression over time.
 
 ### 5. Ecosystem Overview (Stacked Area Chart)
 
-Shows the entire ecosystem's growth with top apps broken out.
+Shows the entire ecosystem's growth with top validators broken out.
 
 **File**: `ecosystem_overview.png`
 
@@ -415,7 +415,7 @@ Shows the entire ecosystem's growth with top apps broken out.
 
 ### 6. Rewards Heatmap
 
-Matrix view of rewards by app and round.
+Matrix view of rewards by validator and round.
 
 **File**: `rewards_heatmap.png`
 
@@ -486,9 +486,9 @@ for provider_id, stats in top_consistent:
 ### Example 4: Comparing Two Apps
 
 ```python
-from featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
+from validator_rewards_visualizer import ValidatorRewardsVisualizer
 
-visualizer = FeaturedAppRewardsVisualizer(analyzer)
+visualizer = ValidatorRewardsVisualizer(analyzer)
 
 # Compare two specific apps
 app1 = "provider_id_1"
@@ -503,7 +503,7 @@ visualizer.plot_app_comparison_timeline(
 
 ## API Reference
 
-### FeaturedAppRewardsAnalyzer
+### ValidatorRewardsAnalyzer
 
 #### `__init__(client: SpliceScanClient)`
 
@@ -511,30 +511,30 @@ Initialize analyzer with API client.
 
 #### `fetch_and_process_rewards(max_pages: int = 100, page_size: int = 100) -> Dict[str, Any]`
 
-Fetch updates and process AppRewardCoupon events.
+Fetch updates and process ValidatorRewardCoupon events.
 
 **Returns**: Summary dictionary with:
 - `updates_fetched`: Number of updates fetched
 - `pages_fetched`: Number of pages retrieved
 - `rewards_found`: Number of reward coupons found
-- `unique_apps`: Number of unique featured apps
+- `unique_apps`: Number of unique validators
 - `providers`: List of provider IDs
 
-#### `get_provider_stats(provider_party_id: str) -> Optional[AppRewardStats]`
+#### `get_provider_stats(validator_party_id: str) -> Optional[ValidatorRewardStats]`
 
 Get statistics for a specific app.
 
-#### `get_all_stats() -> Dict[str, AppRewardStats]`
+#### `get_all_stats() -> Dict[str, ValidatorRewardStats]`
 
 Get statistics for all apps.
 
-#### `get_top_apps_by_rewards(limit: int = 10) -> List[Tuple[str, AppRewardStats]]`
+#### `get_top_apps_by_rewards(limit: int = 10) -> List[Tuple[str, ValidatorRewardStats]]`
 
-Get top apps by total rewards.
+Get top validators by total rewards.
 
-#### `get_top_apps_by_activity(limit: int = 10) -> List[Tuple[str, AppRewardStats]]`
+#### `get_top_apps_by_activity(limit: int = 10) -> List[Tuple[str, ValidatorRewardStats]]`
 
-Get top apps by rounds active.
+Get top validators by rounds active.
 
 #### `get_rewards_timeline() -> Dict[int, Dict[str, float]]`
 
@@ -552,19 +552,19 @@ Export raw reward data to CSV.
 
 Export aggregated statistics to CSV.
 
-### FeaturedAppRewardsVisualizer
+### ValidatorRewardsVisualizer
 
-#### `__init__(analyzer: FeaturedAppRewardsAnalyzer)`
+#### `__init__(analyzer: ValidatorRewardsAnalyzer)`
 
 Initialize visualizer with analyzer instance.
 
-#### `plot_app_progress(provider_party_id: str, output_file: Optional[str] = None, show_coupons: bool = True) -> str`
+#### `plot_app_progress(validator_party_id: str, output_file: Optional[str] = None, show_coupons: bool = True) -> str`
 
 Plot reward progression for a single app.
 
 #### `plot_top_apps_comparison(limit: int = 10, output_file: str = 'top_apps_rewards.png', by_metric: str = 'rewards') -> str`
 
-Plot comparison of top apps. `by_metric` can be 'rewards', 'activity', or 'coupons'.
+Plot comparison of top validators. `by_metric` can be 'rewards', 'activity', or 'coupons'.
 
 #### `plot_app_comparison_timeline(provider_ids: List[str], output_file: str = 'apps_comparison_timeline.png', cumulative: bool = False) -> str`
 
@@ -576,26 +576,26 @@ Plot stacked area chart of ecosystem.
 
 #### `plot_rewards_heatmap(output_file: str = 'rewards_heatmap.png', top_n: int = 20) -> str`
 
-Plot heatmap of rewards by app and round.
+Plot heatmap of rewards by validator and round.
 
 #### `plot_reward_distribution(output_file: str = 'reward_distribution.png') -> str`
 
 Plot distribution analysis (pie chart + histogram).
 
-#### `generate_comprehensive_report(output_dir: str = 'featured_app_rewards_report', top_apps_limit: int = 10) -> Dict[str, str]`
+#### `generate_comprehensive_report(output_dir: str = 'validator_rewards_report', top_apps_limit: int = 10) -> Dict[str, str]`
 
-Generate complete report with all visualizations.
+Generate report with all visualizations.
 
 ## Troubleshooting
 
 ### No Rewards Found
 
-**Problem**: "No AppRewardCoupon events found in the fetched data"
+**Problem**: "No ValidatorRewardCoupon events found in the fetched data"
 
 **Solutions**:
 1. Increase `--max-pages` to fetch more data
 2. Verify the API endpoint is correct
-3. Check if the ledger has any featured app rewards yet
+3. Check if the ledger has any validator rewards yet
 4. Try a different network endpoint
 
 ### Network/API Errors
@@ -653,17 +653,17 @@ pip install matplotlib numpy
 - **Fetching**: ~1-2 seconds per page (100 updates each)
 - **Processing**: ~0.1 seconds per 100 updates
 - **Visualization**: ~2-5 seconds per chart
-- **Complete Analysis** (100 pages): ~3-5 minutes
+- **Analysis** (100 pages): ~3-5 minutes
 
 ## Contributing
 
 When extending the analysis system:
 
-1. Add new metrics to `AppRewardStats`
-2. Implement new visualization types in `FeaturedAppRewardsVisualizer`
-3. Create new analysis methods in `FeaturedAppRewardsAnalyzer`
+1. Add new metrics to `ValidatorRewardStats`
+2. Implement new visualization types in `ValidatorRewardsVisualizer`
+3. Create new analysis methods in `ValidatorRewardsAnalyzer`
 4. Update this documentation
-5. Add examples to `examples/featured_app_rewards_example.py`
+5. Add examples to `examples/validator_rewards_example.py`
 
 ## References
 

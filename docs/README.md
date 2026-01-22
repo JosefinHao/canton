@@ -1,6 +1,6 @@
 # Splice Network Scan API Client
 
-A comprehensive Python client for querying and analyzing on-chain data from the Splice Network using the Scan API.
+A Python client for querying and analyzing on-chain data from the Splice Network using the Scan API.
 
 ## Quick Start
 
@@ -23,19 +23,19 @@ This client provides an easy-to-use interface for:
 
 ## Features
 
-- **Full Splice API Coverage**: Support for all Splice Scan API endpoints
-- **Update Tree Processing**: Proper preorder traversal of event trees with state accumulation
-- **Robust Error Handling**: Automatic retries and comprehensive error messages
+- **Splice API Coverage**: Support for Splice Scan API endpoints
+- **Update Tree Processing**: Preorder traversal of event trees with state accumulation
+- **Error Handling**: Automatic retries and error messages
 - **Data Analysis Tools**: Built-in analyzers for update volume, mining rounds, ANS entries, featured app rewards, and validator rewards
 - **Rewards Analysis Systems**:
   - **Featured App Rewards**: Track and visualize AppRewardCoupon events (ready for when feature launches)
-  - **Validator Rewards**: Comprehensive tracking and visualization of ValidatorRewardCoupon events
-- **Selective Event Parsing**: Filter events by template ID for efficient processing
+  - **Validator Rewards**: Tracking and visualization of ValidatorRewardCoupon events
+- **Selective Event Parsing**: Filter events by template ID
 - **State Accumulation**: Track contracts, balances, mining rounds, and governance decisions
 - **Defensive Parsing**: Handle new fields and templates gracefully without breaking
-- **Rich Visualizations**: Generate charts and graphs including reward progression, comparisons, heatmaps, and ecosystem overviews
-- **Pagination Support**: Efficient retrieval of large datasets
-- **Type Hints**: Full type annotations for better IDE support
+- **Visualizations**: Generate charts and graphs including reward progression, comparisons, heatmaps, and ecosystem overviews
+- **Pagination Support**: Retrieval of large datasets
+- **Type Hints**: Type annotations for IDE support
 
 ## Installation
 
@@ -219,7 +219,7 @@ print(f"Total ANS entries: {len(ans_df)}")
 validator_stats = analyzer.analyze_validator_activity()
 print(f"Total validators: {validator_stats['total_validators']}")
 
-# Generate comprehensive report
+# Generate report
 report = analyzer.generate_summary_report()
 print(report)
 ```
@@ -243,7 +243,7 @@ BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
 ### Data Analysis Example
 
-Run comprehensive data analysis:
+Run data analysis:
 
 ```bash
 cd examples
@@ -391,9 +391,9 @@ analyzer.create_update_volume_plot(volume_df, 'output.png')
 analyzer.create_ans_analysis_plot(ans_df, 'output.png')
 ```
 
-## Advanced Analytics Module
+## Analytics Module
 
-For comprehensive on-chain data analysis, use the `splice_analytics.py` module which provides 70+ specialized analysis functions:
+For on-chain data analysis, use the `splice_analytics.py` module which provides 70+ analysis functions:
 
 ```python
 from splice_analytics import (
@@ -429,7 +429,7 @@ validator_analyzer = ValidatorAnalyzer(client)
 validators = validator_analyzer.get_validator_summary()
 decentralization = validator_analyzer.calculate_decentralization_score(validators)
 
-# Generate comprehensive network health report
+# Generate network health report
 health_analyzer = NetworkHealthAnalyzer(client)
 health_score = health_analyzer.generate_health_score()
 report = health_analyzer.generate_comprehensive_report()
@@ -451,7 +451,7 @@ print(report)
 - `track_round_progression()` - Historical progression tracking
 
 **ANSAnalyzer**:
-- `fetch_all_ans_entries()` - Complete ANS dataset
+- `fetch_all_ans_entries()` - ANS dataset
 - `analyze_name_patterns()` - Character and length analysis
 - `analyze_expiration_patterns()` - Expiry timeline analysis
 - `analyze_namespace_saturation()` - Short name availability
@@ -473,7 +473,7 @@ print(report)
 
 **NetworkHealthAnalyzer**:
 - `generate_health_score()` - Composite 100-point health score
-- `generate_comprehensive_report()` - Full network health report
+- `generate_report()` - Network health report
 
 **FeaturedAppRewardsAnalyzer**:
 - `fetch_and_process_rewards()` - Extract AppRewardCoupon events from ledger
@@ -491,11 +491,11 @@ print(report)
 
 ## Featured App Rewards Analysis
 
-Analyze featured app rewards by processing `AppRewardCoupon` contract creation events from the Canton ledger. This provides comprehensive insights into reward distribution, app performance, and ecosystem growth.
+Analyze featured app rewards by processing `AppRewardCoupon` contract creation events from the Canton ledger.
 
 ### Quick Start - Command Line
 
-Run a complete analysis with visualizations:
+Run analysis with visualizations:
 
 ```bash
 python analyze_featured_app_rewards.py
@@ -554,7 +554,7 @@ The Featured App Rewards system generates:
 # Quick analysis (10 pages, no visualizations)
 python analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
 
-# Full analysis with CSV export
+# Analysis with CSV export
 python analyze_featured_app_rewards.py --export-csv --max-pages 200
 
 # Analyze top 20 apps in detail
@@ -566,7 +566,7 @@ python analyze_featured_app_rewards.py --output-dir my_analysis
 
 ### Documentation
 
-For comprehensive documentation, examples, and API reference, see:
+For documentation, examples, and API reference, see:
 - [Featured App Rewards Analysis Guide](FEATURED_APP_REWARDS_GUIDE.md)
 - [Example Scripts](examples/featured_app_rewards_example.py)
 
@@ -576,7 +576,7 @@ Analyze validator rewards by processing `ValidatorRewardCoupon` contract creatio
 
 ### Quick Start - Command Line
 
-Run a complete analysis with visualizations:
+Run analysis with visualizations:
 
 ```bash
 python analyze_validator_rewards.py
@@ -624,7 +624,7 @@ analyzer.export_stats_to_csv('validator_statistics.csv')
 # Quick analysis (10 pages, no visualizations)
 python analyze_validator_rewards.py --max-pages 10 --no-visualizations
 
-# Full analysis with CSV export
+# Analysis with CSV export
 python analyze_validator_rewards.py --export-csv --max-pages 200
 
 # Analyze top 20 validators in detail
@@ -636,7 +636,7 @@ python analyze_validator_rewards.py --output-dir my_analysis
 
 ### Documentation
 
-For comprehensive documentation, examples, and API reference, see:
+For documentation, examples, and API reference, see:
 - [Validator Rewards Analysis Guide](VALIDATOR_REWARDS_GUIDE.md)
 
 ## Data Analytics Insights
@@ -730,7 +730,7 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 - How many validators to compromise? → Nakamoto coefficient
 - Is centralization increasing? → Decentralization risk scoring
 - Are there geographic risks? → Validator distribution analysis
-- What's our security posture? → Comprehensive security assessment
+- What's our security posture? → Security assessment
 
 **For Community Managers:**
 - When are users most active? → Temporal pattern analysis
@@ -769,7 +769,7 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 ```
 canton/
 ├── canton_scan_client.py      # Main Splice API client
-├── splice_analytics.py         # Comprehensive analytics module (70+ functions)
+├── splice_analytics.py         # Analytics module (70+ functions)
 ├── splice_insights.py          # Data analytics insights & visualizations
 ├── config_example.yaml         # Configuration template
 ├── requirements.txt            # Python dependencies
@@ -782,7 +782,7 @@ canton/
 ```
 canton/
 ├── canton_scan_client.py      # Main Splice API client
-├── splice_analytics.py         # Comprehensive analytics module (70+ functions)
+├── splice_analytics.py         # Analytics module (70+ functions)
 ├── config_example.yaml         # Configuration template
 ├── requirements.txt            # Python dependencies
 ├── README.md                   # This file
@@ -793,7 +793,7 @@ canton/
 
 ## Error Handling
 
-The client includes comprehensive error handling:
+The client includes error handling:
 
 ```python
 try:
@@ -873,7 +873,7 @@ For issues and questions:
 
 ### Version 2.0.0 (2026-01-15)
 
-- **BREAKING CHANGE**: Complete rewrite to support Splice Network Scan API
+- **BREAKING CHANGE**: Rewrite to support Splice Network Scan API
 - Changed from `CantonScanClient` to `SpliceScanClient`
 - Replaced generic Canton ledger methods with Splice-specific endpoints
 - Added support for:
