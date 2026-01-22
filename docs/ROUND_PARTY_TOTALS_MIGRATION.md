@@ -55,20 +55,20 @@ Content-Type: application/json
 
 ```bash
 # Analyze first 100 rounds
-python analyze_featured_app_rewards.py --max-rounds 100
+python scripts/analyze_featured_app_rewards.py --max-rounds 100
 
 # Analyze specific range
-python analyze_featured_app_rewards.py --start-round 100 --end-round 200
+python scripts/analyze_featured_app_rewards.py --start-round 100 --end-round 200
 
 # Analysis with CSV export
-python analyze_featured_app_rewards.py --export-csv
+python scripts/analyze_featured_app_rewards.py --export-csv
 ```
 
 ### Programmatic
 
 ```python
-from canton_scan_client import SpliceScanClient
-from featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
+from src.canton_scan_client import SpliceScanClient
+from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
 
 client = SpliceScanClient(base_url="...")
 analyzer = FeaturedAppRewardsAnalyzer(client)
@@ -135,10 +135,10 @@ Test from your Mac terminal:
 
 ```bash
 # Quick test
-python analyze_featured_app_rewards.py --max-rounds 50 --no-visualizations
+python scripts/analyze_featured_app_rewards.py --max-rounds 50 --no-visualizations
 
 # Test with visualizations
-python analyze_featured_app_rewards.py --max-rounds 200 --export-csv
+python scripts/analyze_featured_app_rewards.py --max-rounds 200 --export-csv
 ```
 
 The validator rewards analyzer (`validator_rewards_analyzer.py`) also uses this same endpoint, accessing the `validator_rewards` field instead of `app_rewards`.

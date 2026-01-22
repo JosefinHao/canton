@@ -5,7 +5,7 @@ A Python client for querying and analyzing on-chain data from the Splice Network
 ## Quick Start
 
 ```python
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 # Initialize and start querying - that's it!
 client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
@@ -90,7 +90,7 @@ api:
 ### Basic Queries
 
 ```python
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 # Initialize client
 client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
@@ -118,6 +118,8 @@ client.close()
 ### Using Context Manager
 
 ```python
+from src.canton_scan_client import SpliceScanClient
+
 # Recommended: use context manager for automatic cleanup
 with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/") as client:
     # Your queries here
@@ -130,8 +132,8 @@ with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync
 For proper processing of updates with event tree traversal and state accumulation:
 
 ```python
-from canton_scan_client import SpliceScanClient
-from update_tree_processor import UpdateTreeProcessor
+from src.canton_scan_client import SpliceScanClient
+from src.update_tree_processor import UpdateTreeProcessor
 
 client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
 
@@ -396,7 +398,8 @@ analyzer.create_ans_analysis_plot(ans_df, 'output.png')
 For on-chain data analysis, use the `splice_analytics.py` module which provides 70+ analysis functions:
 
 ```python
-from splice_analytics import (
+from src.canton_scan_client import SpliceScanClient
+from src.splice_analytics import (
     TransactionAnalyzer,
     MiningRoundAnalyzer,
     ANSAnalyzer,
@@ -498,7 +501,7 @@ Analyze featured app rewards by processing `AppRewardCoupon` contract creation e
 Run analysis with visualizations:
 
 ```bash
-python analyze_featured_app_rewards.py
+python scripts/analyze_featured_app_rewards.py
 ```
 
 This generates:
@@ -511,9 +514,9 @@ This generates:
 ### Quick Start - Programmatic
 
 ```python
-from canton_scan_client import SpliceScanClient
-from featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
-from featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
+from src.canton_scan_client import SpliceScanClient
+from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
+from src.featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
 
 # Initialize
 client = SpliceScanClient(base_url="...")
@@ -552,16 +555,16 @@ The Featured App Rewards system generates:
 
 ```bash
 # Quick analysis (10 pages, no visualizations)
-python analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+python scripts/analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
 
 # Analysis with CSV export
-python analyze_featured_app_rewards.py --export-csv --max-pages 200
+python scripts/analyze_featured_app_rewards.py --export-csv --max-pages 200
 
 # Analyze top 20 apps in detail
-python analyze_featured_app_rewards.py --top-apps 20
+python scripts/analyze_featured_app_rewards.py --top-apps 20
 
 # Custom output directory
-python analyze_featured_app_rewards.py --output-dir my_analysis
+python scripts/analyze_featured_app_rewards.py --output-dir my_analysis
 ```
 
 ### Documentation
@@ -579,7 +582,7 @@ Analyze validator rewards by processing `ValidatorRewardCoupon` contract creatio
 Run analysis with visualizations:
 
 ```bash
-python analyze_validator_rewards.py
+python scripts/analyze_validator_rewards.py
 ```
 
 This generates:
@@ -592,9 +595,9 @@ This generates:
 ### Quick Start - Programmatic
 
 ```python
-from canton_scan_client import SpliceScanClient
-from validator_rewards_analyzer import ValidatorRewardsAnalyzer
-from validator_rewards_visualizer import ValidatorRewardsVisualizer
+from src.canton_scan_client import SpliceScanClient
+from src.validator_rewards_analyzer import ValidatorRewardsAnalyzer
+from src.validator_rewards_visualizer import ValidatorRewardsVisualizer
 
 # Initialize
 client = SpliceScanClient(base_url="...")
@@ -622,16 +625,16 @@ analyzer.export_stats_to_csv('validator_statistics.csv')
 
 ```bash
 # Quick analysis (10 pages, no visualizations)
-python analyze_validator_rewards.py --max-pages 10 --no-visualizations
+python scripts/analyze_validator_rewards.py --max-pages 10 --no-visualizations
 
 # Analysis with CSV export
-python analyze_validator_rewards.py --export-csv --max-pages 200
+python scripts/analyze_validator_rewards.py --export-csv --max-pages 200
 
 # Analyze top 20 validators in detail
-python analyze_validator_rewards.py --top-validators 20
+python scripts/analyze_validator_rewards.py --top-validators 20
 
 # Custom output directory
-python analyze_validator_rewards.py --output-dir my_analysis
+python scripts/analyze_validator_rewards.py --output-dir my_analysis
 ```
 
 ### Documentation
@@ -644,7 +647,8 @@ For documentation, examples, and API reference, see:
 For executive-level insights and strategic decision-making, use the `splice_insights.py` module which provides actionable business intelligence:
 
 ```python
-from splice_insights import (
+from src.canton_scan_client import SpliceScanClient
+from src.splice_insights import (
     NetworkGrowthInsights,
     UserBehaviorInsights,
     EconomicHealthInsights,
@@ -710,27 +714,37 @@ visualizer.create_executive_dashboard('executive_dashboard.png')
 
 ```
 canton/
-├── canton_scan_client.py      # Main Splice API client
-├── splice_analytics.py         # Analytics module (70+ functions)
-├── splice_insights.py          # Data analytics insights & visualizations
-├── config_example.yaml         # Configuration template
-├── requirements.txt            # Python dependencies
-├── README.md                   # This file
-└── examples/
-    ├── basic_queries.py        # Basic query examples
-    └── data_analysis.py        # Data analysis examples
-```
-
-```
-canton/
-├── canton_scan_client.py      # Main Splice API client
-├── splice_analytics.py         # Analytics module (70+ functions)
-├── config_example.yaml         # Configuration template
-├── requirements.txt            # Python dependencies
-├── README.md                   # This file
-└── examples/
-    ├── basic_queries.py        # Basic query examples
-    └── data_analysis.py        # Data analysis examples
+├── src/
+│   ├── __init__.py
+│   ├── canton_scan_client.py           # Main Splice API client
+│   ├── featured_app_rewards_analyzer.py # Featured app rewards analysis
+│   ├── featured_app_rewards_visualizer.py # Featured app visualizations
+│   ├── validator_rewards_analyzer.py    # Validator rewards analysis
+│   ├── validator_rewards_visualizer.py  # Validator visualizations
+│   ├── splice_analytics.py              # Analytics module (70+ functions)
+│   ├── splice_insights.py               # Data analytics insights & visualizations
+│   └── update_tree_processor.py         # Update tree processing
+├── scripts/
+│   ├── analyze_featured_app_rewards.py  # Featured app rewards CLI
+│   ├── analyze_validator_rewards.py     # Validator rewards CLI
+│   ├── check_api_status.py              # API status checker
+│   ├── splice_analytics.py              # Analytics CLI script
+│   ├── splice_analytics_debug.py        # Analytics diagnostics
+│   └── splice_insights.py               # Insights CLI script
+├── docs/
+│   ├── README.md                        # This file
+│   ├── FEATURED_APP_REWARDS_GUIDE.md    # Featured app rewards guide
+│   ├── VALIDATOR_REWARDS_GUIDE.md       # Validator rewards guide
+│   ├── ANALYTICS_DIAGNOSTIC_README.md   # Analytics diagnostics guide
+│   ├── UPDATE_TREE_PROCESSING.md        # Update tree processing docs
+│   ├── ROUND_PARTY_TOTALS_MIGRATION.md  # Migration guide
+│   └── API_REFERENCE.md                 # API reference
+├── examples/
+│   ├── basic_queries.py                 # Basic query examples
+│   ├── data_analysis.py                 # Data analysis examples
+│   └── featured_app_rewards_example.py  # Featured app rewards example
+├── config_example.yaml                  # Configuration template
+└── requirements.txt                     # Python dependencies
 ```
 
 ## Error Handling
