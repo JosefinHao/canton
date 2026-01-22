@@ -3,6 +3,15 @@ Featured App Rewards Analyzer
 
 This module analyzes featured app rewards using the round-party-totals API endpoint.
 
+Reward Mechanism (from Canton Coin Whitepaper):
+- Featured apps can mint up to 100x more Canton Coin than fees burned by users
+- Featured apps receive $1 additional weight per Canton Coin transaction facilitated
+- Unfeatured apps can only mint up to 80% of fees back (cap_ua = 0.6)
+- Actual rewards depend on:
+  * Minting curve allocation for the round
+  * Competition from other apps
+  * Total activity weights across the network
+
 Features:
 - Extract reward data from round-party-totals API
 - Organize rewards by featured app (provider party ID)
