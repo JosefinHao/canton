@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Featured App Rewards analysis has been updated to use the `/v0/round-party-totals` API endpoint instead of parsing individual contract events. This provides a much more efficient and reliable way to analyze app rewards.
+The Featured App Rewards analysis has been updated to use the `/v0/round-party-totals` API endpoint instead of parsing individual contract events. This provides a more and reliable way to analyze app rewards.
 
 ## What Changed
 
@@ -14,7 +14,7 @@ The Featured App Rewards analysis has been updated to use the `/v0/round-party-t
 ### New Approach (Current)
 - Uses `/v0/round-party-totals` POST endpoint
 - Fetches aggregated data directly per party per round
-- Much faster and more efficient
+- Faster
 - Returns structured data with:
   - `app_rewards`: Rewards for the round
   - `cumulative_app_rewards`: Total rewards up to that round
@@ -60,7 +60,7 @@ python analyze_featured_app_rewards.py --max-rounds 100
 # Analyze specific range
 python analyze_featured_app_rewards.py --start-round 100 --end-round 200
 
-# Full analysis with CSV export
+# Analysis with CSV export
 python analyze_featured_app_rewards.py --export-csv
 ```
 
@@ -96,7 +96,7 @@ class AppRewardRecord:
     round_number: int
     app_rewards: float                 # NEW: Per-round rewards
     cumulative_app_rewards: float      # NEW: Cumulative total
-    metadata: Dict[str, Any]           # Full API response
+    metadata: Dict[str, Any]           # API response
 ```
 
 ### AppRewardStats (Updated)
@@ -137,7 +137,7 @@ Test from your Mac terminal:
 # Quick test
 python analyze_featured_app_rewards.py --max-rounds 50 --no-visualizations
 
-# Full test with visualizations
+# Test with visualizations
 python analyze_featured_app_rewards.py --max-rounds 200 --export-csv
 ```
 

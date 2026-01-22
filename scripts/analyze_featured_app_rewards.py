@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Validator Rewards Analysis Script
+Featured App Rewards Analysis Script
 
-This script performs comprehensive analysis of validator rewards from the Canton
-ledger by processing ValidatorRewardCoupon contract creation events.
+This script analyzes featured app rewards from the Canton ledger using the
+round-party-totals API endpoint.
 
 Usage:
     python analyze_featured_app_rewards.py [options]
@@ -11,23 +11,27 @@ Usage:
 Options:
     --url URL                Base URL for the Splice Scan API
                             (default: https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/)
-    --max-pages N           Maximum number of pages to fetch (default: 100)
-    --page-size N           Updates per page (default: 100)
-    --output-dir DIR        Output directory for reports (default: validator_rewards_report)
-    --top-validators N            Number of top validators to analyze in detail (default: 10)
+    --start-round N         Starting round number (default: 1)
+    --end-round N           Ending round number (default: auto-detect)
+    --max-rounds N          Maximum number of rounds to fetch (default: 500)
+    --output-dir DIR        Output directory for reports (default: featured_app_rewards_report)
+    --top-apps N            Number of top apps to analyze (default: 10)
     --no-visualizations     Skip generating visualizations
     --export-csv            Export raw data and stats to CSV files
     --verbose              Enable verbose logging
 
 Example:
-    # Full analysis with default settings
+    # Analysis with default settings
     python analyze_featured_app_rewards.py
 
-    # Quick analysis of first 10 pages
-    python analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+    # Analysis of first 100 rounds
+    python analyze_featured_app_rewards.py --max-rounds 100 --no-visualizations
 
-    # Full analysis with CSV export
+    # Analysis with CSV export
     python analyze_featured_app_rewards.py --export-csv --output-dir my_report
+
+    # Analyze specific round range
+    python analyze_featured_app_rewards.py --start-round 100 --end-round 200
 """
 
 import argparse
@@ -36,9 +40,9 @@ import os
 import logging
 from datetime import datetime
 
-from canton_scan_client import SpliceScanClient
-from validator_rewards_analyzer import ValidatorRewardsAnalyzer
-from validator_rewards_visualizer import ValidatorRewardsVisualizer
+from src.canton_scan_client import SpliceScanClient
+from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
+from src.featured_app_rewards_visualizer import FeaturedAppRewardsVisualizer
 
 
 def setup_logging(verbose: bool = False):
@@ -54,7 +58,7 @@ def setup_logging(verbose: bool = False):
 def main():
     """Main analysis function."""
     parser = argparse.ArgumentParser(
-        description='Analyze validator rewards from Canton ledger',
+        description='Analyze featured app rewards from Canton ledger',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -65,27 +69,33 @@ def main():
         help='Base URL for Splice Scan API'
     )
     parser.add_argument(
-        '--max-pages',
+        '--start-round',
         type=int,
-        default=100,
-        help='Maximum number of pages to fetch (default: 100)'
+        default=1,
+        help='Starting round number (default: 1)'
     )
     parser.add_argument(
-        '--page-size',
+        '--end-round',
         type=int,
-        default=100,
-        help='Updates per page (default: 100)'
+        default=None,
+        help='Ending round number (default: auto-detect)'
+    )
+    parser.add_argument(
+        '--max-rounds',
+        type=int,
+        default=500,
+        help='Maximum number of rounds to fetch (default: 500)'
     )
     parser.add_argument(
         '--output-dir',
-        default='validator_rewards_report',
-        help='Output directory for reports (default: validator_rewards_report)'
+        default='featured_app_rewards_report',
+        help='Output directory for reports (default: featured_app_rewards_report)'
     )
     parser.add_argument(
-        '--top-validators',
+        '--top-apps',
         type=int,
         default=10,
-        help='Number of top validators to analyze in detail (default: 10)'
+        help='Number of top apps to analyze in detail (default: 10)'
     )
     parser.add_argument(
         '--no-visualizations',
@@ -110,14 +120,15 @@ def main():
 
     # Print header
     print("=" * 80)
-    print("VALIDATOR REWARDS ANALYSIS")
+    print("FEATURED APP REWARDS ANALYSIS")
     print("=" * 80)
     print(f"\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"API URL: {args.url}")
-    print(f"Max Pages: {args.max_pages}")
-    print(f"Page Size: {args.page_size}")
+    print(f"Start Round: {args.start_round}")
+    print(f"End Round: {args.end_round if args.end_round else 'auto-detect'}")
+    print(f"Max Rounds: {args.max_rounds}")
     print(f"Output Directory: {args.output_dir}")
-    print(f"Top Validators: {args.top_validators}")
+    print(f"Top Apps: {args.top_apps}")
     print()
 
     # Create output directory
@@ -133,29 +144,30 @@ def main():
         return 1
 
     # Step 2: Fetch and process rewards data
-    print("Step 2/5: Fetching and processing ValidatorRewardCoupon events...")
-    print(f"(This may take several minutes for {args.max_pages} pages)\n")
+    print("Step 2/5: Fetching and processing featured app rewards...")
+    print(f"(Fetching rounds {args.start_round} to {args.end_round if args.end_round else 'auto-detect'})\n")
 
     try:
-        analyzer = ValidatorRewardsAnalyzer(client)
+        analyzer = FeaturedAppRewardsAnalyzer(client)
         summary = analyzer.fetch_and_process_rewards(
-            max_pages=args.max_pages,
-            page_size=args.page_size
+            start_round=args.start_round,
+            end_round=args.end_round,
+            max_rounds=args.max_rounds
         )
 
         print("\n✓ Data fetched and processed successfully")
-        print(f"  - Updates fetched: {summary['updates_fetched']:,}")
-        print(f"  - Pages fetched: {summary['pages_fetched']}")
+        print(f"  - Entries fetched: {summary['entries_fetched']:,}")
+        print(f"  - Batches fetched: {summary['batches_fetched']}")
         print(f"  - Rewards found: {summary['rewards_found']:,}")
-        print(f"  - Unique apps: {summary['unique_validators']}")
+        print(f"  - Unique apps: {summary['unique_apps']}")
         print()
 
         if summary['rewards_found'] == 0:
-            print("⚠ No ValidatorRewardCoupon events found in the fetched data.")
+            print("⚠ No featured app rewards found in the fetched data.")
             print("This could mean:")
-            print("  - The ledger doesn't have any validator rewards yet")
-            print("  - You need to fetch more pages (try increasing --max-pages)")
-            print("  - The API endpoint may require authentication")
+            print("  - The ledger doesn't have any featured app rewards yet")
+            print("  - You need to fetch more rounds (try increasing --max-rounds)")
+            print("  - Try adjusting --start-round and --end-round")
             return 1
 
     except Exception as e:
@@ -212,10 +224,10 @@ def main():
         print("(This may take a few minutes)\n")
 
         try:
-            visualizer = ValidatorRewardsVisualizer(analyzer)
-            output_files = visualizer.generate_comprehensive_report(
+            visualizer = FeaturedAppRewardsVisualizer(analyzer)
+            output_files = visualizer.generate_report(
                 output_dir=args.output_dir,
-                top_apps_limit=args.top_validators
+                top_apps_limit=args.top_apps
             )
 
             print(f"\n✓ Generated {len(output_files)} visualization charts")
@@ -244,14 +256,14 @@ def main():
         print("  - app_statistics.csv        : Aggregated statistics per app")
 
     if not args.no_visualizations:
-        print("  - top_apps_rewards.png      : Top validators by total rewards")
-        print("  - top_apps_activity.png     : Top validators by rounds active")
+        print("  - top_apps_rewards.png      : Top apps by total rewards")
+        print("  - top_apps_activity.png     : Top apps by rounds active")
         print("  - ecosystem_overview.png    : Stacked area chart of ecosystem")
         print("  - rewards_heatmap.png       : Heatmap of rewards by app/round")
         print("  - reward_distribution.png   : Distribution analysis")
         print("  - timeline_per_round.png    : Timeline comparison (per round)")
         print("  - timeline_cumulative.png   : Timeline comparison (cumulative)")
-        print(f"  - app_XX_*_progress.png     : Individual progress (top {args.top_validators})")
+        print(f"  - app_XX_*_progress.png     : Individual progress (top {args.top_apps})")
 
     print("\n" + "=" * 80)
     print()

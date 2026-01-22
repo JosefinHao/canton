@@ -4,7 +4,7 @@ Quick API Status Checker
 Run this to see which endpoints are accessible and working.
 """
 
-from canton_scan_client import SpliceScanClient
+from src.canton_scan_client import SpliceScanClient
 
 BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
 
@@ -117,7 +117,7 @@ def main():
         print("✓ All endpoints accessible!")
 
     print()
-    print("For detailed diagnostics, run:")
+    print("For diagnostics, run:")
     print("  python splice_analytics_debug.py")
     print()
 

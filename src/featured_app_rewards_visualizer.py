@@ -427,17 +427,17 @@ class FeaturedAppRewardsVisualizer:
 
         return output_file
 
-    def generate_comprehensive_report(
+    def generate_report(
         self,
         output_dir: str = 'featured_app_rewards_report',
         top_apps_limit: int = 10
     ) -> Dict[str, str]:
         """
-        Generate comprehensive visualization report with all charts.
+        Generate visualization report with all charts.
 
         Args:
             output_dir: Output directory for report files
-            top_apps_limit: Number of top apps to include in detailed analysis
+            top_apps_limit: Number of top apps to include in analysis
 
         Returns:
             Dictionary mapping chart types to output filenames
@@ -447,7 +447,7 @@ class FeaturedAppRewardsVisualizer:
 
         output_files = {}
 
-        print("Generating comprehensive visualization report...")
+        print("Generating visualization report...")
 
         # 1. Top apps comparison (by rewards)
         print("  - Generating top apps by rewards chart...")
