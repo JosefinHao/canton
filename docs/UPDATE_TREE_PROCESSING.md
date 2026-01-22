@@ -41,8 +41,8 @@ This ensures events are processed in the order they occurred in the transaction.
 ### Basic Usage
 
 ```python
-from canton_scan_client import SpliceScanClient
-from update_tree_processor import UpdateTreeProcessor
+from src.canton_scan_client import SpliceScanClient
+from src.update_tree_processor import UpdateTreeProcessor
 
 # Initialize client
 client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
@@ -63,7 +63,7 @@ print(f"Tracked {summary['total_contracts']} contracts")
 ### Using with TransactionAnalyzer
 
 ```python
-from splice_analytics import TransactionAnalyzer
+from src.splice_analytics import TransactionAnalyzer
 
 # Initialize analyzer
 analyzer = TransactionAnalyzer(client)

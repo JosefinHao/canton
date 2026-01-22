@@ -48,7 +48,7 @@ A diagnostic script that tests all endpoints and shows exactly what's failing.
 
 **Usage:**
 ```bash
-python splice_analytics_debug.py
+python scripts/splice_analytics_debug.py
 ```
 
 **What it tests:**
@@ -73,7 +73,7 @@ Quick test script for specific endpoints.
 First, run the diagnostic to see what's failing:
 
 ```bash
-python splice_analytics_debug.py
+python scripts/splice_analytics_debug.py
 ```
 
 This will show you:
@@ -90,7 +90,7 @@ The improved `splice_analytics.py` now includes:
 - Clear explanations when data is missing
 
 ```bash
-python splice_analytics.py
+python scripts/splice_analytics.py
 ```
 
 ### Step 3: Interpret Results
@@ -157,9 +157,7 @@ python splice_analytics.py
 
 ## Files in This Package
 
-- `splice_analytics.py` - Main analytics script (IMPROVED with better errors)
-- `splice_analytics_debug.py` - Diagnostic tool (NEW)
-- `test_endpoints.py` - Basic endpoint tests
-- `test_alternative_endpoints.py` - Alternative endpoint tests
-- `canton_scan_client.py` - API client library
-- `ANALYTICS_DIAGNOSTIC_README.md` - This file
+- `scripts/splice_analytics.py` - Main analytics script (IMPROVED with better errors)
+- `scripts/splice_analytics_debug.py` - Diagnostic tool (NEW)
+- `src/canton_scan_client.py` - API client library
+- `docs/ANALYTICS_DIAGNOSTIC_README.md` - This file

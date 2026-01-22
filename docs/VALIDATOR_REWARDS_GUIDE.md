@@ -29,7 +29,7 @@ This guide explains how to analyze validator rewards from the Canton ledger by p
 Run analysis with default settings:
 
 ```bash
-python analyze_validator_rewards.py
+python scripts/analyze_validator_rewards.py
 ```
 
 This will:
@@ -44,13 +44,13 @@ This will:
 For faster analysis during development or testing:
 
 ```bash
-python analyze_validator_rewards.py --max-pages 10 --no-visualizations
+python scripts/analyze_validator_rewards.py --max-pages 10 --no-visualizations
 ```
 
 ### Analysis with CSV Export
 
 ```bash
-python analyze_validator_rewards.py --export-csv --output-dir my_report
+python scripts/analyze_validator_rewards.py --export-csv --output-dir my_report
 ```
 
 ## Architecture
@@ -156,7 +156,7 @@ class ValidatorRewardStats:
 ### Basic Options
 
 ```bash
-python analyze_validator_rewards.py [OPTIONS]
+python scripts/analyze_validator_rewards.py [OPTIONS]
 ```
 
 ### Available Options
@@ -177,7 +177,7 @@ python analyze_validator_rewards.py [OPTIONS]
 #### 1. Default Analysis
 
 ```bash
-python analyze_validator_rewards.py
+python scripts/analyze_validator_rewards.py
 ```
 
 Fetches 100 pages, generates all visualizations, creates summary report.
@@ -185,13 +185,13 @@ Fetches 100 pages, generates all visualizations, creates summary report.
 #### 2. Quick Preview (10 Pages, No Charts)
 
 ```bash
-python analyze_validator_rewards.py --max-pages 10 --no-visualizations
+python scripts/analyze_validator_rewards.py --max-pages 10 --no-visualizations
 ```
 
 #### 3. Analysis with Data Export
 
 ```bash
-python analyze_validator_rewards.py \
+python scripts/analyze_validator_rewards.py \
     --max-pages 200 \
     --export-csv \
     --output-dir full_analysis_2024
@@ -200,13 +200,13 @@ python analyze_validator_rewards.py \
 #### 4. Analyze Top 20 Apps
 
 ```bash
-python analyze_validator_rewards.py --top-apps 20
+python scripts/analyze_validator_rewards.py --top-apps 20
 ```
 
 #### 5. Custom API Endpoint
 
 ```bash
-python analyze_validator_rewards.py \
+python scripts/analyze_validator_rewards.py \
     --url https://custom.api.url/api/scan/ \
     --max-pages 50
 ```
@@ -237,8 +237,8 @@ validator_rewards_report/
 ### Basic Example
 
 ```python
-from canton_scan_client import SpliceScanClient
-from validator_rewards_analyzer import ValidatorRewardsAnalyzer
+from src.canton_scan_client import SpliceScanClient
+from src.validator_rewards_analyzer import ValidatorRewardsAnalyzer
 
 # Initialize client
 client = SpliceScanClient(
@@ -283,7 +283,7 @@ if stats:
 ### Generating Visualizations
 
 ```python
-from validator_rewards_visualizer import ValidatorRewardsVisualizer
+from src.validator_rewards_visualizer import ValidatorRewardsVisualizer
 
 # Create visualizer
 visualizer = ValidatorRewardsVisualizer(analyzer)
@@ -486,7 +486,7 @@ for provider_id, stats in top_consistent:
 ### Example 4: Comparing Two Apps
 
 ```python
-from validator_rewards_visualizer import ValidatorRewardsVisualizer
+from src.validator_rewards_visualizer import ValidatorRewardsVisualizer
 
 visualizer = ValidatorRewardsVisualizer(analyzer)
 
