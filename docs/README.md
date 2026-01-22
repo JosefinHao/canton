@@ -706,64 +706,6 @@ visualizer = InsightVisualizer(client)
 visualizer.create_executive_dashboard('executive_dashboard.png')
 ```
 
-### Critical Business Questions Answered
-
-**For Executives & Investors:**
-- Is the network growing sustainably? → Growth trajectory analysis
-- What's the 30/90/180-day outlook? → Growth projections
-- Is the network healthy overall? → Composite health score (0-100)
-- Resource allocation analysis → Risk assessments & classifications
-
-**For Network Operators:**
-- Infrastructure scaling timing → Peak hour analysis
-- Power user concentration risk → Concentration risk metrics
-- Traffic spike analysis → Anomaly detection with cause inference
-- Decentralization status → Decentralization score tracking
-
-**For Token Economists:**
-- Is wealth concentrating dangerously? → Gini coefficient & inequality metrics
-- Is token velocity healthy? → Velocity analysis with interpretations
-- What's the supply outlook? → Supply dynamics tracking
-- Are we at risk of plutocracy? → Wealth concentration assessments
-
-**For Security Teams:**
-- How many validators to compromise? → Nakamoto coefficient
-- Is centralization increasing? → Decentralization risk scoring
-- Are there geographic risks? → Validator distribution analysis
-- What's our security posture? → Security assessment
-
-**For Community Managers:**
-- When are users most active? → Temporal pattern analysis
-- Who are the power users? → Top user identification
-- Is participation healthy? → Governance participation metrics
-- What does community want? → Priority inference from proposals
-
-### Output Classifications
-
-**Risk Assessments**:
-- HIGH RISK / MODERATE RISK / LOW RISK classifications
-- Quantitative thresholds and scoring
-- Risk level determination
-
-**Growth Classifications**:
-- EXCELLENT: Strong accelerating growth
-- GOOD: Positive growth trend
-- WATCH: Growth slowing
-- CRITICAL: Declining activity
-
-**Infrastructure Analysis**:
-- Peak pattern identification
-- Resource allocation metrics
-- Utilization patterns
-
-**Executive Visualizations**:
-- 6-panel executive dashboard (PNG export)
-- Growth trajectories with trend lines
-- Activity heatmaps (hourly × daily)
-- Health score gauges
-- Key metrics summaries
-- Distribution charts
-
 ## Project Structure
 
 ```
@@ -805,32 +747,6 @@ except requests.exceptions.RequestException as e:
     print(f"Request Error: {e}")
 ```
 
-## Best Practices
-
-1. **Use Context Managers**: Always use the client as a context manager to ensure proper cleanup:
-   ```python
-   with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/") as client:
-       # Your code here
-   ```
-
-2. **Use Pagination**: For large datasets, use pagination to avoid memory issues:
-   ```python
-   # Fetch updates in pages
-   result = client.get_updates(page_size=100, after_migration_id=prev_id, after_record_time=prev_time)
-   ```
-
-3. **Handle Errors**: Always wrap API calls in try-except blocks for production use:
-   ```python
-   try:
-       updates = client.get_updates(page_size=10)
-   except Exception as e:
-       print(f"Error: {e}")
-   ```
-
-4. **Rate Limiting**: Be mindful of API rate limits and implement appropriate delays if needed
-
-5. **Cache Results**: Consider caching frequently accessed data to reduce API calls
-
 ## Troubleshooting
 
 ### Connection Errors
@@ -869,26 +785,3 @@ For issues and questions:
 - GitHub Issues: [Add your repository URL]
 - Email: [Add support email]
 
-## Changelog
-
-### Version 2.0.0 (2026-01-15)
-
-- **BREAKING CHANGE**: Rewrite to support Splice Network Scan API
-- Changed from `CantonScanClient` to `SpliceScanClient`
-- Replaced generic Canton ledger methods with Splice-specific endpoints
-- Added support for:
-  - DSO queries
-  - ANS (Amulet Name Service) entries
-  - Mining rounds (open, issuing, closed)
-  - Amulet holdings and balances
-  - Validator faucets and licenses
-  - Transfer preapprovals
-  - Featured app rights
-  - Vote requests and results
-  - Splice-specific network configuration
-- Updated all examples to use new Splice API methods
-- Updated data analyzer to work with Splice data structures
-
-### Version 1.0.0
-
-- Initial release with generic Canton Scan API support
