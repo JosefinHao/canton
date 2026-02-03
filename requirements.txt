@@ -4,6 +4,15 @@
 requests>=2.31.0
 urllib3>=2.0.0
 
+# Google Cloud dependencies (for data pipeline)
+google-cloud-bigquery>=3.0.0
+google-cloud-storage>=2.0.0
+google-auth>=2.0.0
+
+# Cloud Functions (for serverless deployment)
+functions-framework>=3.0.0
+flask>=2.0.0
+
 # Data analysis and visualization (optional but recommended)
 pandas>=2.0.0
 matplotlib>=3.7.0
