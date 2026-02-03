@@ -1,7 +1,9 @@
 """
-BigQuery Client Module for Canton Blockchain Data Pipeline (Cloud Function Version)
+BigQuery Client Module for Canton Blockchain Data Pipeline
 
-This is a standalone version for deployment with Cloud Functions.
+Matches the actual schema of:
+- Raw table: governence-483517.raw.events
+- Parsed table: governence-483517.transformed.events_parsed
 """
 
 import json
@@ -16,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class BigQueryClient:
-    """
-    Client for interacting with Google BigQuery for Canton blockchain data.
-    """
+    """Client for interacting with Google BigQuery for Canton blockchain data."""
 
     def __init__(
         self,
@@ -44,9 +44,9 @@ class BigQueryClient:
     def get_last_processed_position(self) -> Tuple[Optional[int], Optional[str]]:
         """Get the last processed position from the raw events table."""
         query = f"""
-        SELECT migration_id, record_time
+        SELECT migration_id, recorded_at
         FROM `{self.raw_table_id}`
-        ORDER BY migration_id DESC, record_time DESC
+        ORDER BY migration_id DESC, recorded_at DESC
         LIMIT 1
         """
 
@@ -57,11 +57,14 @@ class BigQueryClient:
             if results:
                 row = results[0]
                 migration_id = row.migration_id
-                record_time = row.record_time
-                if isinstance(record_time, datetime):
-                    record_time = record_time.isoformat()
-                logger.info(f"Last processed: migration_id={migration_id}, record_time={record_time}")
-                return migration_id, record_time
+                recorded_at = row.recorded_at
+                # Handle both string and datetime types
+                if isinstance(recorded_at, datetime):
+                    recorded_at = recorded_at.isoformat() + "Z"
+                elif recorded_at and not recorded_at.endswith("Z"):
+                    recorded_at = recorded_at + "Z"
+                logger.info(f"Last processed: migration_id={migration_id}, recorded_at={recorded_at}")
+                return migration_id, recorded_at
 
             logger.info("No existing data found")
             return None, None
@@ -76,9 +79,9 @@ class BigQueryClient:
     def get_last_transformed_position(self) -> Tuple[Optional[int], Optional[str]]:
         """Get the last transformed position from the parsed events table."""
         query = f"""
-        SELECT migration_id, record_time
+        SELECT migration_id, recorded_at
         FROM `{self.parsed_table_id}`
-        ORDER BY migration_id DESC, record_time DESC
+        ORDER BY migration_id DESC, recorded_at DESC
         LIMIT 1
         """
 
@@ -89,10 +92,10 @@ class BigQueryClient:
             if results:
                 row = results[0]
                 migration_id = row.migration_id
-                record_time = row.record_time
-                if isinstance(record_time, datetime):
-                    record_time = record_time.isoformat()
-                return migration_id, record_time
+                recorded_at = row.recorded_at
+                if isinstance(recorded_at, datetime):
+                    recorded_at = recorded_at.isoformat() + "Z"
+                return migration_id, recorded_at
 
             return None, None
 
@@ -121,72 +124,75 @@ class BigQueryClient:
         return len(events)
 
     def run_transformation_query(self) -> int:
-        """Run transformation query for incremental processing."""
-        last_migration_id, last_record_time = self.get_last_transformed_position()
+        """
+        Run transformation query for incremental processing.
+
+        Transforms from raw.events to transformed.events_parsed:
+        - Converts STRING timestamps to TIMESTAMP
+        - Flattens nested arrays (signatories.list[].element -> signatories[])
+        - Parses JSON string fields to JSON type
+        """
+        last_migration_id, last_recorded_at = self.get_last_transformed_position()
 
         where_clause = ""
-        if last_migration_id is not None and last_record_time is not None:
+        if last_migration_id is not None and last_recorded_at is not None:
             where_clause = f"""
             WHERE (migration_id > {last_migration_id})
-               OR (migration_id = {last_migration_id} AND record_time > '{last_record_time}')
+               OR (migration_id = {last_migration_id} AND recorded_at > '{last_recorded_at}')
             """
 
         transformation_query = f"""
         INSERT INTO `{self.parsed_table_id}` (
-            event_id, update_id, migration_id, record_time, domain_id,
-            workflow_id, command_id, effective_at, offset, event_type,
-            template_id, contract_id, package_name, choice, consuming,
-            signatories, observers, acting_parties, witness_parties,
-            child_event_ids, payload, contract_key, exercise_result,
-            interface_id, created_at_ts, timestamp, raw_event, trace_context
+            event_id, update_id, contract_id, template_id, package_name,
+            event_type, event_type_original, synchronizer_id, migration_id,
+            choice, interface_id, consuming,
+            effective_at, recorded_at, timestamp, created_at_ts,
+            signatories, observers, acting_parties, witness_parties, child_event_ids,
+            reassignment_counter, source_synchronizer, target_synchronizer,
+            unassign_id, submitter,
+            payload, contract_key, exercise_result, raw_event, trace_context,
+            year, month, day
         )
         SELECT
-            event_id, update_id,
-            CAST(migration_id AS INT64) as migration_id,
-            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', record_time) as record_time,
-            domain_id, workflow_id, command_id,
+            event_id,
+            update_id,
+            contract_id,
+            template_id,
+            package_name,
+            event_type,
+            event_type_original,
+            synchronizer_id,
+            migration_id,
+            choice,
+            interface_id,
+            consuming,
+            -- Parse timestamps
             SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', effective_at) as effective_at,
-            SAFE_CAST(offset AS INT64) as offset,
-            event_type, template_id, contract_id, package_name, choice,
-            SAFE_CAST(consuming AS BOOL) as consuming,
-            CASE
-                WHEN signatories IS NULL THEN []
-                WHEN JSON_TYPE(SAFE.PARSE_JSON(signatories)) = 'array' THEN
-                    ARRAY(SELECT JSON_VALUE(item) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(signatories))) AS item)
-                ELSE []
-            END as signatories,
-            CASE
-                WHEN observers IS NULL THEN []
-                WHEN JSON_TYPE(SAFE.PARSE_JSON(observers)) = 'array' THEN
-                    ARRAY(SELECT JSON_VALUE(item) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(observers))) AS item)
-                ELSE []
-            END as observers,
-            CASE
-                WHEN acting_parties IS NULL THEN []
-                WHEN JSON_TYPE(SAFE.PARSE_JSON(acting_parties)) = 'array' THEN
-                    ARRAY(SELECT JSON_VALUE(item) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(acting_parties))) AS item)
-                ELSE []
-            END as acting_parties,
-            CASE
-                WHEN witness_parties IS NULL THEN []
-                WHEN JSON_TYPE(SAFE.PARSE_JSON(witness_parties)) = 'array' THEN
-                    ARRAY(SELECT JSON_VALUE(item) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(witness_parties))) AS item)
-                ELSE []
-            END as witness_parties,
-            CASE
-                WHEN child_event_ids IS NULL THEN []
-                WHEN JSON_TYPE(SAFE.PARSE_JSON(child_event_ids)) = 'array' THEN
-                    ARRAY(SELECT JSON_VALUE(item) FROM UNNEST(JSON_QUERY_ARRAY(SAFE.PARSE_JSON(child_event_ids))) AS item)
-                ELSE []
-            END as child_event_ids,
+            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', recorded_at) as recorded_at,
+            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', timestamp) as timestamp,
+            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', created_at_ts) as created_at_ts,
+            -- Flatten nested arrays (list[].element structure)
+            ARRAY(SELECT e.element FROM UNNEST(signatories.list) AS e) as signatories,
+            ARRAY(SELECT e.element FROM UNNEST(observers.list) AS e) as observers,
+            ARRAY(SELECT e.element FROM UNNEST(acting_parties.list) AS e) as acting_parties,
+            ARRAY(SELECT e.element FROM UNNEST(witness_parties.list) AS e) as witness_parties,
+            ARRAY(SELECT e.element FROM UNNEST(child_event_ids.list) AS e) as child_event_ids,
+            -- Other fields
+            reassignment_counter,
+            source_synchronizer,
+            target_synchronizer,
+            unassign_id,
+            submitter,
+            -- Parse JSON fields
             SAFE.PARSE_JSON(payload) as payload,
             SAFE.PARSE_JSON(contract_key) as contract_key,
             SAFE.PARSE_JSON(exercise_result) as exercise_result,
-            interface_id,
-            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', created_at_ts) as created_at_ts,
-            SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', timestamp) as timestamp,
             SAFE.PARSE_JSON(raw_event) as raw_event,
-            SAFE.PARSE_JSON(trace_context) as trace_context
+            SAFE.PARSE_JSON(trace_context) as trace_context,
+            -- Date parts
+            year,
+            month,
+            day
         FROM `{self.raw_table_id}`
         {where_clause}
         """
@@ -212,8 +218,9 @@ class BigQueryClient:
             return True
         if raw_pos[0] > parsed_pos[0]:
             return True
-        if raw_pos[0] == parsed_pos[0] and raw_pos[1] > parsed_pos[1]:
-            return True
+        if raw_pos[0] == parsed_pos[0] and raw_pos[1] and parsed_pos[1]:
+            if raw_pos[1] > parsed_pos[1]:
+                return True
         return False
 
     def get_table_stats(self, table_id: str) -> Dict[str, Any]:
@@ -236,12 +243,12 @@ class BigQueryClient:
             'raw_table': {
                 'table_id': self.raw_table_id,
                 'stats': self.get_table_stats(self.raw_table_id),
-                'last_position': dict(zip(['migration_id', 'record_time'], self.get_last_processed_position()))
+                'last_position': dict(zip(['migration_id', 'recorded_at'], self.get_last_processed_position()))
             },
             'parsed_table': {
                 'table_id': self.parsed_table_id,
                 'stats': self.get_table_stats(self.parsed_table_id),
-                'last_position': dict(zip(['migration_id', 'record_time'], self.get_last_transformed_position()))
+                'last_position': dict(zip(['migration_id', 'recorded_at'], self.get_last_transformed_position()))
             },
             'needs_transformation': self.check_for_new_raw_data()
         }

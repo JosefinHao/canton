@@ -69,39 +69,110 @@ HTTP-triggered serverless function with three endpoints:
 - **Clustering**: By `template_id`, `event_type`, `migration_id`
 - **Schema**: Properly typed fields (TIMESTAMP, INT64, BOOL, ARRAY, JSON)
 
-## Deployment
+## Deployment Options
 
-### Prerequisites
+Multiple deployment options are available depending on your GCP permissions and infrastructure preferences.
 
-1. Google Cloud SDK installed and configured
-2. Appropriate IAM permissions:
-   - Cloud Functions Developer
-   - BigQuery Data Editor
-   - Cloud Scheduler Admin
-3. Enable required APIs:
-   ```bash
-   gcloud services enable cloudfunctions.googleapis.com
-   gcloud services enable cloudscheduler.googleapis.com
-   gcloud services enable bigquery.googleapis.com
-   ```
+### Option 1: Standalone Python Script (Simplest)
 
-### Deploy Cloud Function
+Run the ingestion script manually or via cron on any machine with Python and BigQuery access.
 
+**Prerequisites:**
+- Python 3.8+
+- BigQuery access (service account or user credentials)
+- `GOOGLE_APPLICATION_CREDENTIALS` environment variable set
+
+**Setup:**
 ```bash
-cd cloud_functions/data_ingestion
+# Install dependencies
+pip install -r requirements.txt
 
-# Make scripts executable
-chmod +x deploy.sh setup_scheduler.sh
+# Run ingestion
+python scripts/run_ingestion.py
 
-# Deploy the function
-./deploy.sh
+# Run transformation only
+python scripts/run_ingestion.py --transform-only
+
+# Check status
+python scripts/run_ingestion.py --status
+
+# Custom settings
+python scripts/run_ingestion.py --max-pages 50 --page-size 1000
 ```
 
-### Set Up Cloud Scheduler
+**Cron setup (every 15 minutes):**
+```bash
+# Add to crontab (crontab -e)
+*/15 * * * * cd /path/to/canton && /usr/bin/python3 scripts/run_ingestion.py >> /var/log/canton-ingestion.log 2>&1
+```
+
+### Option 2: BigQuery Scheduled Query (Transformation Only)
+
+Use BigQuery's native scheduled queries for transformation. This doesn't fetch new data but transforms any raw data that exists.
+
+**Setup via Console:**
+1. Go to [BigQuery Console](https://console.cloud.google.com/bigquery?project=governence-483517)
+2. Click "Scheduled queries" in the left menu
+3. Click "Create scheduled query"
+4. Paste contents of `bigquery_scheduled/transform_events.sql`
+5. Set schedule to "every 15 minutes"
+6. Click "Schedule"
+
+**Setup via CLI:**
+```bash
+cd bigquery_scheduled
+./setup_scheduled_query.sh
+```
+
+### Option 3: Cloud Run (Containerized)
+
+Deploy as a containerized service on Cloud Run.
+
+**Prerequisites:**
+- Cloud Run API enabled
+- Cloud Build API enabled
+- Artifact Registry API enabled
+
+**Deploy:**
+```bash
+cd cloud_run/data_ingestion
+./deploy.sh
+./setup_scheduler.sh
+```
+
+### Option 4: Cloud Functions (Serverless)
+
+Deploy as a Cloud Function triggered by Cloud Scheduler.
+
+**Prerequisites:**
+- Cloud Functions API enabled
+- Cloud Scheduler API enabled
+
+**Deploy:**
+```bash
+cd cloud_functions/data_ingestion
+./deploy.sh
+./setup_scheduler.sh
+```
+
+### Required APIs and Permissions
+
+If you encounter permission errors, ask a project admin to enable:
 
 ```bash
-# Create scheduler job to run every 15 minutes
-./setup_scheduler.sh
+# For Cloud Run
+gcloud services enable run.googleapis.com --project governence-483517
+gcloud services enable cloudbuild.googleapis.com --project governence-483517
+gcloud services enable artifactregistry.googleapis.com --project governence-483517
+
+# For Cloud Functions
+gcloud services enable cloudfunctions.googleapis.com --project governence-483517
+
+# For Cloud Scheduler
+gcloud services enable cloudscheduler.googleapis.com --project governence-483517
+
+# BigQuery (likely already enabled)
+gcloud services enable bigquery.googleapis.com --project governence-483517
 ```
 
 ### Environment Variables
