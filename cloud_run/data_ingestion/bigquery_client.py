@@ -44,9 +44,9 @@ class BigQueryClient:
     def get_last_processed_position(self) -> Tuple[Optional[int], Optional[str]]:
         """Get the last processed position from the raw events table."""
         query = f"""
-        SELECT migration_id, record_time
+        SELECT migration_id, recorded_at
         FROM `{self.raw_table_id}`
-        ORDER BY migration_id DESC, record_time DESC
+        ORDER BY migration_id DESC, recorded_at DESC
         LIMIT 1
         """
 
@@ -57,11 +57,11 @@ class BigQueryClient:
             if results:
                 row = results[0]
                 migration_id = row.migration_id
-                record_time = row.record_time
-                if isinstance(record_time, datetime):
-                    record_time = record_time.isoformat()
-                logger.info(f"Last processed: migration_id={migration_id}, record_time={record_time}")
-                return migration_id, record_time
+                recorded_at = row.recorded_at
+                if isinstance(recorded_at, datetime):
+                    recorded_at = recorded_at.isoformat()
+                logger.info(f"Last processed: migration_id={migration_id}, recorded_at={recorded_at}")
+                return migration_id, recorded_at
 
             logger.info("No existing data found")
             return None, None
