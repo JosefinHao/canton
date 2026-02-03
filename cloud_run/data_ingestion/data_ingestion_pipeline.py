@@ -146,6 +146,10 @@ class DataIngestionPipeline:
                 'recorded_at': current_recorded_at
             }
 
+            # Update state table for fast future lookups
+            if stats.events_inserted > 0 and current_migration_id and current_recorded_at:
+                self.bq_client.update_raw_state(current_migration_id, current_recorded_at)
+
             if self.config.auto_transform and stats.events_inserted > 0:
                 if stats.events_inserted >= self.config.transform_batch_threshold or \
                    self.bq_client.check_for_new_raw_data():

@@ -4,6 +4,8 @@ BigQuery Client Module for Canton Blockchain Data Pipeline
 Matches the actual schema of:
 - Raw table: governence-483517.raw.events
 - Parsed table: governence-483517.transformed.events_parsed
+
+Uses a state table to track ingestion position efficiently (avoids scanning 10+ TB).
 """
 
 import json
@@ -37,34 +39,120 @@ class BigQueryClient:
 
         self.raw_table_id = f"{project_id}.{raw_dataset}.{raw_table}"
         self.parsed_table_id = f"{project_id}.{transformed_dataset}.{parsed_table}"
+        self.state_table_id = f"{project_id}.{raw_dataset}.ingestion_state"
 
         self.client = bigquery.Client(project=project_id)
         logger.info(f"BigQuery client initialized for project: {project_id}")
 
-    def get_last_processed_position(self) -> Tuple[Optional[int], Optional[str]]:
-        """Get the last processed position from the raw events table."""
+        # Ensure state table exists
+        self._ensure_state_table()
+
+    def _ensure_state_table(self):
+        """Create the state table if it doesn't exist."""
+        schema = [
+            bigquery.SchemaField("table_name", "STRING", mode="REQUIRED"),
+            bigquery.SchemaField("migration_id", "INTEGER"),
+            bigquery.SchemaField("recorded_at", "STRING"),
+            bigquery.SchemaField("updated_at", "TIMESTAMP"),
+        ]
+
+        table = bigquery.Table(self.state_table_id, schema=schema)
+
+        try:
+            self.client.get_table(self.state_table_id)
+            logger.debug(f"State table {self.state_table_id} already exists")
+        except NotFound:
+            try:
+                self.client.create_table(table)
+                logger.info(f"Created state table: {self.state_table_id}")
+            except Exception as e:
+                logger.warning(f"Could not create state table: {e}")
+
+    def _get_state(self, table_name: str) -> Tuple[Optional[int], Optional[str]]:
+        """Get the last position from state table."""
         query = f"""
         SELECT migration_id, recorded_at
-        FROM `{self.raw_table_id}`
-        ORDER BY migration_id DESC, recorded_at DESC
+        FROM `{self.state_table_id}`
+        WHERE table_name = '{table_name}'
         LIMIT 1
+        """
+        try:
+            results = list(self.client.query(query).result())
+            if results:
+                row = results[0]
+                return row.migration_id, row.recorded_at
+            return None, None
+        except Exception as e:
+            logger.debug(f"Could not read state: {e}")
+            return None, None
+
+    def _update_state(self, table_name: str, migration_id: int, recorded_at: str):
+        """Update the state table with new position."""
+        query = f"""
+        MERGE `{self.state_table_id}` T
+        USING (SELECT '{table_name}' as table_name) S
+        ON T.table_name = S.table_name
+        WHEN MATCHED THEN
+            UPDATE SET migration_id = {migration_id},
+                       recorded_at = '{recorded_at}',
+                       updated_at = CURRENT_TIMESTAMP()
+        WHEN NOT MATCHED THEN
+            INSERT (table_name, migration_id, recorded_at, updated_at)
+            VALUES ('{table_name}', {migration_id}, '{recorded_at}', CURRENT_TIMESTAMP())
+        """
+        try:
+            self.client.query(query).result()
+            logger.info(f"Updated state for {table_name}: migration_id={migration_id}")
+        except Exception as e:
+            logger.warning(f"Could not update state: {e}")
+
+    def get_last_processed_position(self) -> Tuple[Optional[int], Optional[str]]:
+        """
+        Get the last processed position from state table (fast) or MAX query (fallback).
+        Avoids full table scan on 10+ TB table.
+        """
+        # Try state table first (very fast)
+        migration_id, recorded_at = self._get_state("raw_events")
+        if migration_id is not None:
+            logger.info(f"Last processed (from state): migration_id={migration_id}, recorded_at={recorded_at}")
+            return migration_id, recorded_at
+
+        # Fallback: Use MAX() which is faster than ORDER BY + LIMIT
+        logger.info("State not found, using MAX() query (may be slow on first run)")
+        query = f"""
+        SELECT MAX(migration_id) as migration_id
+        FROM `{self.raw_table_id}`
         """
 
         try:
             query_job = self.client.query(query)
             results = list(query_job.result())
 
-            if results:
-                row = results[0]
-                migration_id = row.migration_id
-                recorded_at = row.recorded_at
+            if results and results[0].migration_id is not None:
+                max_migration_id = results[0].migration_id
+
+                # Get max recorded_at for that migration_id
+                query2 = f"""
+                SELECT MAX(recorded_at) as recorded_at
+                FROM `{self.raw_table_id}`
+                WHERE migration_id = {max_migration_id}
+                """
+                results2 = list(self.client.query(query2).result())
+                recorded_at = results2[0].recorded_at if results2 else None
+
                 # Handle both string and datetime types
                 if isinstance(recorded_at, datetime):
                     recorded_at = recorded_at.isoformat() + "Z"
                 elif recorded_at and not recorded_at.endswith("Z"):
                     recorded_at = recorded_at + "Z"
-                logger.info(f"Last processed: migration_id={migration_id}, recorded_at={recorded_at}")
-                return migration_id, recorded_at
+
+                logger.info(f"Last processed (from MAX): migration_id={max_migration_id}, recorded_at={recorded_at}")
+
+                # Save to state table for future fast lookups
+                if recorded_at:
+                    self._update_state("raw_events", max_migration_id, recorded_at)
+
+                return max_migration_id, recorded_at
 
             logger.info("No existing data found")
             return None, None
@@ -77,25 +165,46 @@ class BigQueryClient:
             raise
 
     def get_last_transformed_position(self) -> Tuple[Optional[int], Optional[str]]:
-        """Get the last transformed position from the parsed events table."""
+        """
+        Get the last transformed position from state table (fast) or MAX query (fallback).
+        """
+        # Try state table first (very fast)
+        migration_id, recorded_at = self._get_state("parsed_events")
+        if migration_id is not None:
+            logger.info(f"Last transformed (from state): migration_id={migration_id}")
+            return migration_id, recorded_at
+
+        # Fallback: Use MAX() which is faster than ORDER BY + LIMIT
+        logger.info("Transformed state not found, using MAX() query")
         query = f"""
-        SELECT migration_id, recorded_at
+        SELECT MAX(migration_id) as migration_id
         FROM `{self.parsed_table_id}`
-        ORDER BY migration_id DESC, recorded_at DESC
-        LIMIT 1
         """
 
         try:
             query_job = self.client.query(query)
             results = list(query_job.result())
 
-            if results:
-                row = results[0]
-                migration_id = row.migration_id
-                recorded_at = row.recorded_at
+            if results and results[0].migration_id is not None:
+                max_migration_id = results[0].migration_id
+
+                # Get max recorded_at for that migration_id
+                query2 = f"""
+                SELECT MAX(recorded_at) as recorded_at
+                FROM `{self.parsed_table_id}`
+                WHERE migration_id = {max_migration_id}
+                """
+                results2 = list(self.client.query(query2).result())
+                recorded_at = results2[0].recorded_at if results2 else None
+
                 if isinstance(recorded_at, datetime):
                     recorded_at = recorded_at.isoformat() + "Z"
-                return migration_id, recorded_at
+
+                # Save to state for future fast lookups
+                if recorded_at:
+                    self._update_state("parsed_events", max_migration_id, recorded_at)
+
+                return max_migration_id, recorded_at
 
             return None, None
 
@@ -104,6 +213,14 @@ class BigQueryClient:
         except Exception as e:
             logger.error(f"Error getting last transformed position: {e}")
             raise
+
+    def update_raw_state(self, migration_id: int, recorded_at: str):
+        """Update the raw events state after successful ingestion."""
+        self._update_state("raw_events", migration_id, recorded_at)
+
+    def update_parsed_state(self, migration_id: int, recorded_at: str):
+        """Update the parsed events state after successful transformation."""
+        self._update_state("parsed_events", migration_id, recorded_at)
 
     def insert_raw_events(self, events: List[Dict[str, Any]]) -> int:
         """Insert raw events into BigQuery using streaming insert."""
