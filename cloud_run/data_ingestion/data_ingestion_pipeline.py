@@ -195,15 +195,27 @@ class DataIngestionPipeline:
         return {"list": [{"element": item} for item in items]}
 
     def _extract_events_from_updates(self, updates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Extract events from API updates, matching raw.events schema."""
+        """Extract events from API updates, matching raw.events schema.
+
+        API returns transactions directly with structure:
+        {
+            "update_id": "...",
+            "migration_id": 1,
+            "record_time": "...",
+            "synchronizer_id": "...",
+            "effective_at": "...",
+            "events_by_id": {...}
+        }
+        """
         events = []
 
-        for update in updates:
-            update_data = update.get('update', {})
-            update_type = update_data.get('type', '')
-            migration_id = update.get('migration_id')
-            record_time = update.get('record_time')  # Maps to recorded_at in BQ
-            synchronizer_id = update.get('domain_id')  # API calls it domain_id
+        for txn in updates:
+            migration_id = txn.get('migration_id')
+            record_time = txn.get('record_time')  # Maps to recorded_at in BQ
+            synchronizer_id = txn.get('synchronizer_id')  # Direct field in API
+            update_id = txn.get('update_id')
+            effective_at = txn.get('effective_at')
+            events_by_id = txn.get('events_by_id', {})
 
             # Parse timestamp for date parts
             dt = None
@@ -213,73 +225,47 @@ class DataIngestionPipeline:
                 except (ValueError, AttributeError):
                     pass
 
-            if update_type == 'transaction':
-                transaction = update_data.get('transaction', {})
-                events_by_id = update_data.get('events_by_id', {})
-
-                for event_id, event_details in events_by_id.items():
-                    event_type = self._determine_event_type(event_details)
-                    event = {
-                        'event_id': event_id,
-                        'update_id': transaction.get('update_id'),
-                        'event_type': event_type,
-                        'event_type_original': event_details.get('type'),
-                        'synchronizer_id': synchronizer_id,
-                        'effective_at': transaction.get('effective_at'),
-                        'recorded_at': record_time,
-                        'timestamp': record_time,
-                        'created_at_ts': transaction.get('effective_at'),
-                        'contract_id': event_details.get('contract_id'),
-                        'template_id': event_details.get('template_id'),
-                        'package_name': event_details.get('package_name'),
-                        'migration_id': migration_id,
-                        # Nested array format for party lists
-                        'signatories': self._to_nested_array(event_details.get('signatories', [])),
-                        'observers': self._to_nested_array(event_details.get('observers', [])),
-                        'acting_parties': self._to_nested_array(event_details.get('acting_parties', [])),
-                        'witness_parties': self._to_nested_array(event_details.get('witness_parties', [])),
-                        'child_event_ids': self._to_nested_array(event_details.get('child_event_ids', [])),
-                        'choice': event_details.get('choice'),
-                        'interface_id': event_details.get('interface_id'),
-                        'consuming': event_details.get('consuming'),
-                        'reassignment_counter': event_details.get('reassignment_counter'),
-                        'source_synchronizer': event_details.get('source_synchronizer'),
-                        'target_synchronizer': event_details.get('target_synchronizer'),
-                        'unassign_id': event_details.get('unassign_id'),
-                        'submitter': event_details.get('submitter'),
-                        # JSON string fields
-                        'payload': json.dumps(
-                            event_details.get('create_arguments') or
-                            event_details.get('choice_argument')
-                        ),
-                        'contract_key': json.dumps(event_details.get('contract_key')),
-                        'exercise_result': json.dumps(event_details.get('exercise_result')),
-                        'raw_event': json.dumps(event_details),
-                        'trace_context': json.dumps(transaction.get('trace_context')),
-                        # Date parts
-                        'year': dt.year if dt else None,
-                        'month': dt.month if dt else None,
-                        'day': dt.day if dt else None,
-                    }
-                    events.append(event)
-
-            elif update_type == 'reassignment':
-                reassignment = update_data.get('reassignment', {})
+            # Process each event in the transaction
+            for event_id, event_details in events_by_id.items():
+                event_type = self._determine_event_type(event_details)
                 event = {
-                    'event_id': f"reassign_{record_time}_{migration_id}",
-                    'update_id': reassignment.get('update_id'),
-                    'event_type': 'reassignment',
-                    'event_type_original': 'reassignment',
+                    'event_id': event_id,
+                    'update_id': update_id,
+                    'event_type': event_type,
+                    'event_type_original': event_details.get('event_type'),
                     'synchronizer_id': synchronizer_id,
-                    'migration_id': migration_id,
+                    'effective_at': effective_at,
                     'recorded_at': record_time,
                     'timestamp': record_time,
-                    'reassignment_counter': reassignment.get('reassignment_counter'),
-                    'source_synchronizer': reassignment.get('source'),
-                    'target_synchronizer': reassignment.get('target'),
-                    'unassign_id': reassignment.get('unassign_id'),
-                    'submitter': reassignment.get('submitter'),
-                    'raw_event': json.dumps(update_data),
+                    'created_at_ts': effective_at,
+                    'contract_id': event_details.get('contract_id'),
+                    'template_id': event_details.get('template_id'),
+                    'package_name': event_details.get('package_name'),
+                    'migration_id': migration_id,
+                    # Nested array format for party lists
+                    'signatories': self._to_nested_array(event_details.get('signatories', [])),
+                    'observers': self._to_nested_array(event_details.get('observers', [])),
+                    'acting_parties': self._to_nested_array(event_details.get('acting_parties', [])),
+                    'witness_parties': self._to_nested_array(event_details.get('witness_parties', [])),
+                    'child_event_ids': self._to_nested_array(event_details.get('child_event_ids', [])),
+                    'choice': event_details.get('choice'),
+                    'interface_id': event_details.get('interface_id'),
+                    'consuming': event_details.get('consuming'),
+                    'reassignment_counter': event_details.get('reassignment_counter'),
+                    'source_synchronizer': event_details.get('source_synchronizer'),
+                    'target_synchronizer': event_details.get('target_synchronizer'),
+                    'unassign_id': event_details.get('unassign_id'),
+                    'submitter': event_details.get('submitter'),
+                    # JSON string fields
+                    'payload': json.dumps(
+                        event_details.get('create_arguments') or
+                        event_details.get('choice_argument')
+                    ),
+                    'contract_key': json.dumps(event_details.get('contract_key')),
+                    'exercise_result': json.dumps(event_details.get('exercise_result')),
+                    'raw_event': json.dumps(event_details),
+                    'trace_context': json.dumps(txn.get('trace_context')),
+                    # Date parts
                     'year': dt.year if dt else None,
                     'month': dt.month if dt else None,
                     'day': dt.day if dt else None,

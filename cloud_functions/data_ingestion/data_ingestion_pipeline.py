@@ -1,7 +1,8 @@
 """
-Data Ingestion Pipeline (Cloud Function Version)
+Data Ingestion Pipeline for Canton Blockchain Data (Cloud Function Version)
 
 Orchestrates data flow from Scan API to BigQuery.
+Matches the actual schema of governence-483517.raw.events
 """
 
 import json
@@ -61,7 +62,7 @@ class DataIngestionPipeline:
         self.config = config or PipelineConfig()
         self._scan_client: Optional[SpliceScanClient] = None
         self._bq_client: Optional[BigQueryClient] = None
-        logger.info(f"Pipeline initialized")
+        logger.info("Pipeline initialized")
 
     @property
     def scan_client(self) -> SpliceScanClient:
@@ -90,20 +91,21 @@ class DataIngestionPipeline:
         stats = PipelineStats(started_at=datetime.utcnow().isoformat())
 
         try:
-            start_migration_id, start_record_time = self.bq_client.get_last_processed_position()
+            # Get last processed position (uses recorded_at)
+            start_migration_id, start_recorded_at = self.bq_client.get_last_processed_position()
             stats.start_position = {
                 'migration_id': start_migration_id,
-                'record_time': start_record_time
+                'recorded_at': start_recorded_at
             }
 
-            logger.info(f"Starting from: migration_id={start_migration_id}, record_time={start_record_time}")
+            logger.info(f"Starting from: migration_id={start_migration_id}, recorded_at={start_recorded_at}")
 
             current_migration_id = start_migration_id
-            current_record_time = start_record_time
+            current_recorded_at = start_recorded_at
             total_events_buffer = []
 
             for page_num in range(self.config.max_pages_per_run):
-                updates_response = self._fetch_updates(current_migration_id, current_record_time)
+                updates_response = self._fetch_updates(current_migration_id, current_recorded_at)
 
                 if not updates_response:
                     break
@@ -126,7 +128,8 @@ class DataIngestionPipeline:
                 if updates:
                     last_update = updates[-1]
                     current_migration_id = last_update.get('migration_id', current_migration_id)
-                    current_record_time = last_update.get('record_time', current_record_time)
+                    # API uses record_time, we map to recorded_at
+                    current_recorded_at = last_update.get('record_time', current_recorded_at)
 
                 if len(updates) < self.config.page_size:
                     break
@@ -140,8 +143,12 @@ class DataIngestionPipeline:
 
             stats.end_position = {
                 'migration_id': current_migration_id,
-                'record_time': current_record_time
+                'recorded_at': current_recorded_at
             }
+
+            # Update state table for fast future lookups
+            if stats.events_inserted > 0 and current_migration_id and current_recorded_at:
+                self.bq_client.update_raw_state(current_migration_id, current_recorded_at)
 
             if self.config.auto_transform and stats.events_inserted > 0:
                 if stats.events_inserted >= self.config.transform_batch_threshold or \
@@ -166,86 +173,109 @@ class DataIngestionPipeline:
     def _fetch_updates(
         self,
         after_migration_id: Optional[int],
-        after_record_time: Optional[str]
+        after_recorded_at: Optional[str]
     ) -> Optional[Dict[str, Any]]:
         try:
             return self.scan_client.get_updates(
                 after_migration_id=after_migration_id,
-                after_record_time=after_record_time,
+                after_record_time=after_recorded_at,  # API uses record_time parameter
                 page_size=self.config.page_size
             )
         except Exception as e:
             logger.error(f"Error fetching updates: {e}")
             return None
 
+    def _to_nested_array(self, items: List[str]) -> Dict[str, List[Dict[str, str]]]:
+        """
+        Convert a list to the nested array format used by BigQuery schema.
+        ["a", "b"] -> {"list": [{"element": "a"}, {"element": "b"}]}
+        """
+        if not items:
+            return {"list": []}
+        return {"list": [{"element": item} for item in items]}
+
     def _extract_events_from_updates(self, updates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Extract events from API updates, matching raw.events schema.
+
+        API returns transactions directly with structure:
+        {
+            "update_id": "...",
+            "migration_id": 1,
+            "record_time": "...",
+            "synchronizer_id": "...",
+            "effective_at": "...",
+            "events_by_id": {...}
+        }
+        """
         events = []
 
-        for update in updates:
-            update_data = update.get('update', {})
-            update_type = update_data.get('type', '')
-            migration_id = update.get('migration_id')
-            record_time = update.get('record_time')
-            domain_id = update.get('domain_id')
+        for txn in updates:
+            migration_id = txn.get('migration_id')
+            record_time = txn.get('record_time')  # Maps to recorded_at in BQ
+            synchronizer_id = txn.get('synchronizer_id')  # Direct field in API
+            update_id = txn.get('update_id')
+            effective_at = txn.get('effective_at')
+            events_by_id = txn.get('events_by_id', {})
 
-            if update_type == 'transaction':
-                transaction = update_data.get('transaction', {})
-                events_by_id = update_data.get('events_by_id', {})
+            # Parse timestamp for date parts
+            dt = None
+            if record_time:
+                try:
+                    dt = datetime.fromisoformat(record_time.replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    pass
 
-                for event_id, event_details in events_by_id.items():
-                    event = {
-                        'event_id': event_id,
-                        'update_id': transaction.get('update_id'),
-                        'migration_id': migration_id,
-                        'record_time': record_time,
-                        'domain_id': domain_id,
-                        'workflow_id': transaction.get('workflow_id'),
-                        'command_id': transaction.get('command_id'),
-                        'effective_at': transaction.get('effective_at'),
-                        'offset': str(transaction.get('offset', '')),
-                        'event_type': self._determine_event_type(event_details),
-                        'template_id': event_details.get('template_id'),
-                        'contract_id': event_details.get('contract_id'),
-                        'package_name': event_details.get('package_name'),
-                        'choice': event_details.get('choice'),
-                        'consuming': event_details.get('consuming'),
-                        'signatories': json.dumps(event_details.get('signatories', [])),
-                        'observers': json.dumps(event_details.get('observers', [])),
-                        'acting_parties': json.dumps(event_details.get('acting_parties', [])),
-                        'witness_parties': json.dumps(event_details.get('witness_parties', [])),
-                        'child_event_ids': json.dumps(event_details.get('child_event_ids', [])),
-                        'payload': json.dumps(
-                            event_details.get('create_arguments') or
-                            event_details.get('choice_argument')
-                        ),
-                        'contract_key': json.dumps(event_details.get('contract_key')),
-                        'exercise_result': json.dumps(event_details.get('exercise_result')),
-                        'interface_id': event_details.get('interface_id'),
-                        'created_at_ts': transaction.get('effective_at'),
-                        'timestamp': record_time,
-                        'raw_event': json.dumps(event_details),
-                        'trace_context': json.dumps(transaction.get('trace_context'))
-                    }
-                    events.append(event)
-
-            elif update_type == 'reassignment':
-                reassignment = update_data.get('reassignment', {})
+            # Process each event in the transaction
+            for event_id, event_details in events_by_id.items():
+                event_type = self._determine_event_type(event_details)
                 event = {
-                    'event_id': f"reassign_{record_time}_{migration_id}",
-                    'update_id': reassignment.get('update_id'),
-                    'migration_id': migration_id,
-                    'record_time': record_time,
-                    'domain_id': domain_id,
-                    'event_type': 'reassignment',
-                    'offset': str(reassignment.get('offset', '')),
+                    'event_id': event_id,
+                    'update_id': update_id,
+                    'event_type': event_type,
+                    'event_type_original': event_details.get('event_type'),
+                    'synchronizer_id': synchronizer_id,
+                    'effective_at': effective_at,
+                    'recorded_at': record_time,
                     'timestamp': record_time,
-                    'raw_event': json.dumps(update_data)
+                    'created_at_ts': effective_at,
+                    'contract_id': event_details.get('contract_id'),
+                    'template_id': event_details.get('template_id'),
+                    'package_name': event_details.get('package_name'),
+                    'migration_id': migration_id,
+                    # Nested array format for party lists
+                    'signatories': self._to_nested_array(event_details.get('signatories', [])),
+                    'observers': self._to_nested_array(event_details.get('observers', [])),
+                    'acting_parties': self._to_nested_array(event_details.get('acting_parties', [])),
+                    'witness_parties': self._to_nested_array(event_details.get('witness_parties', [])),
+                    'child_event_ids': self._to_nested_array(event_details.get('child_event_ids', [])),
+                    'choice': event_details.get('choice'),
+                    'interface_id': event_details.get('interface_id'),
+                    'consuming': event_details.get('consuming'),
+                    'reassignment_counter': event_details.get('reassignment_counter'),
+                    'source_synchronizer': event_details.get('source_synchronizer'),
+                    'target_synchronizer': event_details.get('target_synchronizer'),
+                    'unassign_id': event_details.get('unassign_id'),
+                    'submitter': event_details.get('submitter'),
+                    # JSON string fields
+                    'payload': json.dumps(
+                        event_details.get('create_arguments') or
+                        event_details.get('choice_argument')
+                    ),
+                    'contract_key': json.dumps(event_details.get('contract_key')),
+                    'exercise_result': json.dumps(event_details.get('exercise_result')),
+                    'raw_event': json.dumps(event_details),
+                    'trace_context': json.dumps(txn.get('trace_context')),
+                    # Date parts
+                    'year': dt.year if dt else None,
+                    'month': dt.month if dt else None,
+                    'day': dt.day if dt else None,
                 }
                 events.append(event)
 
         return events
 
     def _determine_event_type(self, event_details: Dict[str, Any]) -> str:
+        """Determine event type from event details."""
         if 'create_arguments' in event_details:
             return 'created'
         elif 'choice' in event_details:
