@@ -179,11 +179,15 @@ class DataIngestionPipeline:
     ) -> Optional[Dict[str, Any]]:
         """Fetch events from the /v0/events endpoint."""
         try:
-            return self.scan_client.get_events(
+            logger.info(f"Fetching events from API: migration_id={after_migration_id}, recorded_at={after_recorded_at}")
+            result = self.scan_client.get_events(
                 after_migration_id=after_migration_id,
                 after_record_time=after_recorded_at,
                 page_size=self.config.page_size
             )
+            events_count = len(result.get('events', [])) if result else 0
+            logger.info(f"API returned {events_count} events")
+            return result
         except Exception as e:
             logger.error(f"Error fetching events: {e}")
             return None
