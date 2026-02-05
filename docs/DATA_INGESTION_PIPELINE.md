@@ -246,15 +246,20 @@ gcloud functions logs read canton-data-ingestion --region=us-central1
 ### BigQuery Monitoring
 
 ```sql
--- Check latest ingestion
+-- Check latest ingestion (using state table for efficiency)
+SELECT migration_id, recorded_at, updated_at
+FROM `governence-483517.raw.ingestion_state`
+WHERE table_name = 'raw_events';
+
+-- Check latest raw data
 SELECT
-    MAX(record_time) as latest_record,
+    MAX(recorded_at) as latest_record,
     COUNT(*) as total_events
 FROM `governence-483517.raw.events`;
 
 -- Check transformation status
 SELECT
-    MAX(record_time) as latest_transformed,
+    MAX(recorded_at) as latest_transformed,
     COUNT(*) as total_parsed
 FROM `governence-483517.transformed.events_parsed`;
 
@@ -270,17 +275,17 @@ LIMIT 30;
 
 ## Incremental Loading Logic
 
-The pipeline uses `migration_id` and `record_time` to track position:
+The pipeline uses `migration_id` and `recorded_at` to track position:
 
-1. Query BigQuery for latest `(migration_id, record_time)`
-2. Call Scan API with `after` parameter containing this position
-3. API returns events after this position in ascending order
-4. Insert new events and update position tracking
+1. Query state table for latest `(migration_id, recorded_at)` (very fast)
+2. Fallback to MAX() query if state not found
+3. Call Scan API with `after` parameter (API uses `record_time`, mapped to `recorded_at`)
+4. Insert new events and update state table
 
 This ensures:
 - No duplicate events
 - No gaps in data
-- Efficient incremental loading
+- Efficient incremental loading (avoids 10+ TB table scans)
 - Ability to catch up after downtime
 
 ## Error Handling
@@ -360,16 +365,24 @@ Response:
         {
             "migration_id": 0,
             "record_time": "2024-01-01T00:00:01Z",
-            "domain_id": "...",
-            "update": {
-                "type": "transaction",
-                "transaction": {...},
-                "events_by_id": {...}
-            }
+            "synchronizer_id": "...",
+            "update_id": "...",
+            "effective_at": "2024-01-01T00:00:01Z",
+            "events_by_id": {...}
         }
     ]
 }
 ```
+
+### Schema Mapping
+
+The pipeline maps API fields to BigQuery columns:
+
+| API Field | BigQuery Column | Notes |
+|-----------|----------------|-------|
+| `record_time` | `recorded_at` | Timestamp of when event was recorded |
+| `synchronizer_id` | `synchronizer_id` | Synchronizer that processed the event |
+| Party arrays | Nested `{list: [{element}]}` | Arrays use BigQuery nested format |
 
 ## Cost Estimation
 

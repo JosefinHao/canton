@@ -2,9 +2,9 @@
 
 ## Overview
 
-This guide explains how to analyze featured app rewards from the Canton ledger by processing `AppRewardCoupon` contract creation events from the update stream. The analysis system provides:
+This guide explains how to analyze featured app rewards from the Canton ledger using the `/v0/round-party-totals` API endpoint. The analysis system provides:
 
-1. **Data Extraction** - Retrieve all AppRewardCoupon events from the ledger
+1. **Data Extraction** - Retrieve aggregated reward data per party per round
 2. **Systematic Organization** - Group rewards by featured app (provider party ID)
 3. **Statistical Analysis** - Calculate metrics and progress for each app
 4. **Visualizations** - Generate charts showing individual progress and comparisons
@@ -20,7 +20,7 @@ Based on the [Canton Coin Whitepaper](https://www.canton.network/hubfs/Canton%20
 
 **Featured vs Unfeatured Applications:**
 - All applications start as "unfeatured" with capped reward potential
-- Super Validators can mark an app as "featured" via ⅔ majority vote
+- Super Validators can mark an app as "featured" via 2/3 majority vote
 - **Featured apps** can mint up to **100x more Canton Coin** than was burned as fees
 - **Unfeatured apps** can only mint up to **80% (0.8x)** of fees back
 
@@ -40,7 +40,7 @@ Based on the [Canton Coin Whitepaper](https://www.canton.network/hubfs/Canton%20
 **Example:**
 If a featured app facilitates a $1000 Canton Coin transfer with $1.96 in fees burned:
 - Activity record weight = $1.93 (fees) + $1.00 (featured bonus) = $2.93
-- Potential mint = up to $2.93 × 100 = $293 worth of Canton Coin
+- Potential mint = up to $2.93 x 100 = $293 worth of Canton Coin
 - Actual mint depends on round allocation and competition
 
 ## Table of Contents
@@ -66,18 +66,17 @@ python scripts/analyze_featured_app_rewards.py
 ```
 
 This will:
-1. Fetch up to 100 pages of updates from the ledger
-2. Extract all AppRewardCoupon creation events
-3. Calculate statistics for each featured app
-4. Generate visualizations
-5. Create a summary report
+1. Fetch reward data from the round-party-totals API
+2. Calculate statistics for each featured app
+3. Generate visualizations
+4. Create a summary report
 
-### Quick Analysis (First 10 Pages)
+### Quick Analysis (First 100 Rounds)
 
 For faster analysis during development or testing:
 
 ```bash
-python scripts/analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+python scripts/analyze_featured_app_rewards.py --max-rounds 100 --no-visualizations
 ```
 
 ### Analysis with CSV Export
@@ -93,9 +92,8 @@ python scripts/analyze_featured_app_rewards.py --export-csv --output-dir my_repo
 The featured app rewards analysis system consists of three main components:
 
 1. **FeaturedAppRewardsAnalyzer** (`featured_app_rewards_analyzer.py`)
-   - Fetches updates from Canton ledger
-   - Traverses event trees to find AppRewardCoupon creation events
-   - Extracts reward data (amount, weight, provider, round)
+   - Fetches aggregated data from `/v0/round-party-totals` API
+   - Extracts app reward data (per-round and cumulative)
    - Calculates statistics and aggregations
 
 2. **FeaturedAppRewardsVisualizer** (`featured_app_rewards_visualizer.py`)
@@ -112,55 +110,51 @@ The featured app rewards analysis system consists of three main components:
 ### Data Flow
 
 ```
-Canton Ledger
-    ↓
-Update Stream (via get_updates API)
-    ↓
-Event Tree Traversal
-    ↓
-AppRewardCoupon Creation Events
-    ↓
+Canton Scan API
+    |
+round-party-totals endpoint (/v0/round-party-totals)
+    |
+Batch Fetching (50 rounds per request)
+    |
 Data Extraction & Aggregation
-    ↓
+    |
 Statistics Calculation
-    ↓
+    |
 Visualizations & Reports
 ```
 
 ## Data Model
 
-### AppRewardCoupon Event Structure
+### API Response Structure
 
-AppRewardCoupon contracts are created on the Canton ledger with the following data:
+The `/v0/round-party-totals` endpoint returns aggregated data:
 
 ```json
 {
-  "template_id": "*.AppRewardCoupon",
-  "contract_id": "...",
-  "create_arguments": {
-    "provider": "party_id",
-    "round": 123,
-    "amount": 100.0,
-    "weight": 1.5
-  }
+  "entries": [
+    {
+      "closed_round": 1,
+      "party": "party_id",
+      "app_rewards": "100.50",
+      "cumulative_app_rewards": "100.50",
+      "validator_rewards": "50.25"
+    }
+  ]
 }
 ```
 
 ### AppRewardRecord
 
-Each reward coupon is stored as an `AppRewardRecord`:
+Each reward entry is stored as an `AppRewardRecord`:
 
 ```python
 @dataclass
 class AppRewardRecord:
-    provider_party_id: str      # Featured app provider
+    provider_party_id: str       # Featured app provider
     round_number: int            # Mining round number
-    amount: float                # Reward amount in CC
-    weight: float                # App weight/priority
-    contract_id: str             # Contract identifier
-    record_time: str             # Timestamp
-    event_id: str                # Event identifier
-    payload: Dict[str, Any]      # Payload
+    app_rewards: float           # Rewards for this round
+    cumulative_app_rewards: float # Cumulative total up to this round
+    metadata: Dict[str, Any]     # Full API response entry
 ```
 
 ### AppRewardStats
@@ -172,16 +166,13 @@ Aggregated statistics for each app:
 class AppRewardStats:
     provider_party_id: str
     total_rewards: float         # Total CC earned
-    total_coupons: int           # Number of coupons
-    total_weight: float          # Sum of weights
-    avg_reward_per_coupon: float
-    avg_weight_per_coupon: float
+    total_coupons: int           # Number of rounds with rewards
+    avg_reward_per_round: float  # Average per round
     first_round: int             # First active round
     last_round: int              # Last active round
     rounds_active: int           # Number of rounds active
     rewards_by_round: Dict[int, float]
-    coupons_by_round: Dict[int, int]
-    weight_by_round: Dict[int, float]
+    cumulative_by_round: Dict[int, float]
 ```
 
 ## Command-Line Usage
@@ -197,8 +188,9 @@ python scripts/analyze_featured_app_rewards.py [OPTIONS]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--url URL` | `https://scan.sv-1.dev.global...` | Splice Scan API base URL |
-| `--max-pages N` | `100` | Maximum pages to fetch |
-| `--page-size N` | `100` | Updates per page |
+| `--start-round N` | `1` | Starting round number |
+| `--end-round N` | Auto | Ending round number |
+| `--max-rounds N` | `500` | Maximum rounds to fetch |
 | `--output-dir DIR` | `featured_app_rewards_report` | Output directory |
 | `--top-apps N` | `10` | Number of top apps to analyze |
 | `--no-visualizations` | Off | Skip generating charts |
@@ -213,27 +205,27 @@ python scripts/analyze_featured_app_rewards.py [OPTIONS]
 python scripts/analyze_featured_app_rewards.py
 ```
 
-Fetches 100 pages, generates all visualizations, creates summary report.
+Fetches up to 500 rounds, generates all visualizations, creates summary report.
 
-#### 2. Quick Preview (10 Pages, No Charts)
+#### 2. Quick Preview (100 Rounds, No Charts)
 
 ```bash
-python scripts/analyze_featured_app_rewards.py --max-pages 10 --no-visualizations
+python scripts/analyze_featured_app_rewards.py --max-rounds 100 --no-visualizations
 ```
 
 #### 3. Analysis with Data Export
 
 ```bash
 python scripts/analyze_featured_app_rewards.py \
-    --max-pages 200 \
+    --max-rounds 1000 \
     --export-csv \
     --output-dir full_analysis_2024
 ```
 
-#### 4. Analyze Top 20 Apps
+#### 4. Analyze Specific Round Range
 
 ```bash
-python scripts/analyze_featured_app_rewards.py --top-apps 20
+python scripts/analyze_featured_app_rewards.py --start-round 100 --end-round 200
 ```
 
 #### 5. Custom API Endpoint
@@ -241,7 +233,7 @@ python scripts/analyze_featured_app_rewards.py --top-apps 20
 ```bash
 python scripts/analyze_featured_app_rewards.py \
     --url https://custom.api.url/api/scan/ \
-    --max-pages 50
+    --max-rounds 500
 ```
 
 ### Output Files
@@ -283,11 +275,12 @@ analyzer = FeaturedAppRewardsAnalyzer(client)
 
 # Fetch and process data
 summary = analyzer.fetch_and_process_rewards(
-    max_pages=50,
-    page_size=100
+    start_round=1,
+    end_round=500,
+    max_rounds=500
 )
 
-print(f"Found {summary['rewards_found']} reward coupons")
+print(f"Found {summary['rewards_found']} reward records")
 print(f"Unique apps: {summary['unique_apps']}")
 
 # Get top apps
@@ -306,7 +299,7 @@ stats = analyzer.get_provider_stats(provider_id)
 if stats:
     print(f"Total Rewards: {stats.total_rewards:,.2f} CC")
     print(f"Rounds Active: {stats.rounds_active}")
-    print(f"Avg per Coupon: {stats.avg_reward_per_coupon:.2f} CC")
+    print(f"Avg per Round: {stats.avg_reward_per_round:.2f} CC")
 
     # Access round-by-round data
     for round_num, amount in stats.rewards_by_round.items():
@@ -366,7 +359,7 @@ all_stats = analyzer.get_all_stats()
 # Custom analysis: Find apps with highest average
 high_avg_apps = sorted(
     all_stats.items(),
-    key=lambda x: x[1].avg_reward_per_coupon,
+    key=lambda x: x[1].avg_reward_per_round,
     reverse=True
 )[:10]
 
@@ -412,7 +405,7 @@ Shows reward progression over time for a single app.
 
 **Features**:
 - Primary axis: Rewards per round (blue line)
-- Secondary axis: Coupon count per round (orange dashed line)
+- Secondary axis: Cumulative rewards (orange dashed line)
 - Statistics box with summary metrics
 - Clear round-by-round progression
 
@@ -484,7 +477,7 @@ top_apps = analyzer.get_top_apps_by_rewards(limit=5)
 for i, (provider_id, stats) in enumerate(top_apps, 1):
     print(f"{i}. Total: {stats.total_rewards:,.0f} CC")
     print(f"   Rounds: {stats.rounds_active}")
-    print(f"   Avg/Coupon: {stats.avg_reward_per_coupon:.2f} CC")
+    print(f"   Avg/Round: {stats.avg_reward_per_round:.2f} CC")
 ```
 
 ### Example 2: Analyzing Growth Trends
@@ -542,14 +535,14 @@ visualizer.plot_app_comparison_timeline(
 
 Initialize analyzer with API client.
 
-#### `fetch_and_process_rewards(max_pages: int = 100, page_size: int = 100) -> Dict[str, Any]`
+#### `fetch_and_process_rewards(start_round: int = 1, end_round: int = None, max_rounds: int = 500) -> Dict[str, Any]`
 
-Fetch updates and process AppRewardCoupon events.
+Fetch and process app rewards from round-party-totals API.
 
 **Returns**: Summary dictionary with:
-- `updates_fetched`: Number of updates fetched
-- `pages_fetched`: Number of pages retrieved
-- `rewards_found`: Number of reward coupons found
+- `entries_fetched`: Number of API entries fetched
+- `batches_fetched`: Number of API batches retrieved
+- `rewards_found`: Number of reward records found
 - `unique_apps`: Number of unique featured apps
 - `providers`: List of provider IDs
 
@@ -623,10 +616,10 @@ Generate report with all visualizations.
 
 ### No Rewards Found
 
-**Problem**: "No AppRewardCoupon events found in the fetched data"
+**Problem**: "No reward entries found in the fetched data"
 
 **Solutions**:
-1. Increase `--max-pages` to fetch more data
+1. Increase `--max-rounds` to fetch more data
 2. Verify the API endpoint is correct
 3. Check if the ledger has any featured app rewards yet
 4. Try a different network endpoint
@@ -646,7 +639,7 @@ Generate report with all visualizations.
 **Problem**: Out of memory when processing large datasets
 
 **Solutions**:
-1. Reduce `--max-pages` and process in batches
+1. Reduce `--max-rounds` and process in batches
 2. Use `--no-visualizations` to reduce memory usage
 3. Export to CSV and analyze externally
 
@@ -674,7 +667,7 @@ pip install matplotlib numpy
 
 ## Best Practices
 
-1. **Start Small**: Use `--max-pages 10` for initial exploration
+1. **Start Small**: Use `--max-rounds 100` for initial exploration
 2. **Export Data**: Always use `--export-csv` for long-running analyses
 3. **Incremental Analysis**: Process data in batches for very large datasets
 4. **Custom Analysis**: Use programmatic interface for specialized queries
@@ -683,20 +676,16 @@ pip install matplotlib numpy
 
 ## Performance Notes
 
-- **Fetching**: ~1-2 seconds per page (100 updates each)
-- **Processing**: ~0.1 seconds per 100 updates
+- **Fetching**: ~1-2 seconds per batch (50 rounds each)
+- **Processing**: Very fast (pre-aggregated data from API)
 - **Visualization**: ~2-5 seconds per chart
-- **Analysis** (100 pages): ~3-5 minutes
+- **Analysis** (500 rounds): ~30-60 seconds
 
-## Contributing
+## Migration Note
 
-When extending the analysis system:
+This analyzer uses the `/v0/round-party-totals` API endpoint, which provides pre-aggregated data per party per round. This is much faster and more reliable than the previous approach of parsing individual `AppRewardCoupon` contract events from the update stream.
 
-1. Add new metrics to `AppRewardStats`
-2. Implement new visualization types in `FeaturedAppRewardsVisualizer`
-3. Create new analysis methods in `FeaturedAppRewardsAnalyzer`
-4. Update this documentation
-5. Add examples to `examples/featured_app_rewards_example.py`
+See [ROUND_PARTY_TOTALS_MIGRATION.md](ROUND_PARTY_TOTALS_MIGRATION.md) for details on the migration.
 
 ## References
 
@@ -704,6 +693,7 @@ When extending the analysis system:
 - [Update Tree Processing Guide](UPDATE_TREE_PROCESSING.md)
 - [Splice Analytics Guide](README.md)
 - [Canton Ledger Documentation](https://docs.daml.com/)
+- [Round Party Totals Migration](ROUND_PARTY_TOTALS_MIGRATION.md)
 
 ## Support
 
