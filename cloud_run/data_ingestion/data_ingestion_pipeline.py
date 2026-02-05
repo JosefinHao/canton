@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PipelineConfig:
     """Configuration for the data ingestion pipeline."""
-    scan_api_base_url: str = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
+    scan_api_base_url: str = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
     scan_api_timeout: int = 60
     scan_api_max_retries: int = 3
     bq_project_id: str = "governence-483517"
@@ -105,18 +105,21 @@ class DataIngestionPipeline:
             total_events_buffer = []
 
             for page_num in range(self.config.max_pages_per_run):
-                updates_response = self._fetch_updates(current_migration_id, current_recorded_at)
+                events_response = self._fetch_events(current_migration_id, current_recorded_at)
 
-                if not updates_response:
+                if not events_response:
                     break
 
-                updates = updates_response.get('updates', updates_response.get('transactions', []))
-                if not updates:
+                # /v0/events returns {"events": [{"update": {...}}, ...]}
+                raw_events = events_response.get('events', [])
+                if not raw_events:
                     break
 
                 stats.pages_fetched += 1
-                stats.events_fetched += len(updates)
+                stats.events_fetched += len(raw_events)
 
+                # Extract the 'update' object from each event wrapper
+                updates = [e.get('update', e) for e in raw_events]
                 events_to_insert = self._extract_events_from_updates(updates)
                 total_events_buffer.extend(events_to_insert)
 
@@ -128,10 +131,9 @@ class DataIngestionPipeline:
                 if updates:
                     last_update = updates[-1]
                     current_migration_id = last_update.get('migration_id', current_migration_id)
-                    # API uses record_time, we map to recorded_at
                     current_recorded_at = last_update.get('record_time', current_recorded_at)
 
-                if len(updates) < self.config.page_size:
+                if len(raw_events) < self.config.page_size:
                     break
 
                 if self.config.api_delay_seconds > 0:
@@ -170,19 +172,20 @@ class DataIngestionPipeline:
 
         return stats
 
-    def _fetch_updates(
+    def _fetch_events(
         self,
         after_migration_id: Optional[int],
         after_recorded_at: Optional[str]
     ) -> Optional[Dict[str, Any]]:
+        """Fetch events from the /v0/events endpoint."""
         try:
-            return self.scan_client.get_updates(
+            return self.scan_client.get_events(
                 after_migration_id=after_migration_id,
-                after_record_time=after_recorded_at,  # API uses record_time parameter
+                after_record_time=after_recorded_at,
                 page_size=self.config.page_size
             )
         except Exception as e:
-            logger.error(f"Error fetching updates: {e}")
+            logger.error(f"Error fetching events: {e}")
             return None
 
     def _to_nested_array(self, items: List[str]) -> Dict[str, List[Dict[str, str]]]:
