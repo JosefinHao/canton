@@ -115,6 +115,38 @@ class SpliceScanClient:
 
         return response
 
+    def get_events(
+        self,
+        after_migration_id: Optional[int] = None,
+        after_record_time: Optional[str] = None,
+        page_size: int = 100,
+        daml_value_encoding: str = "compact_json"
+    ) -> Dict[str, Any]:
+        """
+        Get event history in ascending order using /v0/events endpoint.
+
+        Args:
+            after_migration_id: Start after this migration ID
+            after_record_time: Start after this record time (ISO format)
+            page_size: Maximum number of events to return
+            daml_value_encoding: Encoding format for DAML values
+
+        Returns:
+            Dictionary containing events
+        """
+        json_data: Dict[str, Any] = {
+            'page_size': page_size,
+            'daml_value_encoding': daml_value_encoding
+        }
+
+        if after_migration_id is not None and after_record_time is not None:
+            json_data['after'] = {
+                'after_migration_id': after_migration_id,
+                'after_record_time': after_record_time
+            }
+
+        return self._make_request('POST', '/v0/events', json_data=json_data)
+
     def health_check(self) -> bool:
         """Check if the API is accessible."""
         try:
