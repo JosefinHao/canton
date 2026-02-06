@@ -4,56 +4,127 @@
 
 This document describes the automated data ingestion pipeline that fetches blockchain data from the Canton Scan API and loads it into BigQuery for analysis.
 
+## Phase 3: Data Pipeline & Automation - Implementation Status
+
+| Step | Status | Description |
+|------|--------|-------------|
+| Cloud Storage buckets | ✅ Done | Raw data storage configured |
+| Cloud Run for Scan API ingestion | ✅ Done | Containerized service with SV node failover |
+| Network Configuration | ✅ Done | Cloud NAT + VPC connector for static IP egress |
+| Data transformation pipeline | ✅ Done | BigQuery scheduled query transforms raw → parsed |
+| Cloud Scheduler | ✅ Done | Triggers ingestion every 15 minutes with OIDC auth |
+| IP Whitelisting | ⏳ Pending | Static IP 34.132.24.144 needs whitelisting by SV operators |
+
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Cloud          │     │  Cloud          │     │  BigQuery       │
-│  Scheduler      │────▶│  Function       │────▶│  Tables         │
-│  (every 15 min) │     │  (ingestion)    │     │                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                               │
-                               │ Fetches data from
-                               ▼
-                        ┌─────────────────┐
-                        │  Canton Scan    │
-                        │  API            │
-                        │  (/v2/updates)  │
-                        └─────────────────┘
+│  Cloud          │     │  Cloud Run      │     │  BigQuery       │
+│  Scheduler      │────▶│  Service        │────▶│  Tables         │
+│  (every 15 min) │     │  (with VPC)     │     │                 │
+└─────────────────┘     └────────┬────────┘     └─────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │  VPC Connector          │
+                    │  (canton-connector)     │
+                    └────────────┬────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │  Cloud NAT              │
+                    │  Static IP: 34.132.24.144│
+                    └────────────┬────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              ▼                  ▼                  ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  SV Node 1      │  │  SV Node 2      │  │  SV Node 13     │
+│  (sync.global)  │  │  (digitalasset) │  │  (sv-nodeops)   │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+              │                  │                  │
+              └──────────────────┴──────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │  Canton Scan API        │
+                    │  (/v0/events endpoint)  │
+                    └─────────────────────────┘
 ```
+
+## MainNet SV Node URLs (Failover List)
+
+The pipeline automatically tries multiple Super Validator nodes until one succeeds:
+
+| # | SV Name | URL |
+|---|---------|-----|
+| 1 | Global-Synchronizer-Foundation | https://scan.sv-1.global.canton.network.sync.global |
+| 2 | Digital-Asset-1 | https://scan.sv-1.global.canton.network.digitalasset.com |
+| 3 | Digital-Asset-2 | https://scan.sv-2.global.canton.network.digitalasset.com |
+| 4 | Cumberland-1 | https://scan.sv-1.global.canton.network.cumberland.io |
+| 5 | Cumberland-2 | https://scan.sv-2.global.canton.network.cumberland.io |
+| 6 | Tradeweb-Markets-1 | https://scan.sv-1.global.canton.network.tradeweb.com |
+| 7 | MPC-Holding-Inc | https://scan.sv-1.global.canton.network.mpch.io |
+| 8 | Five-North-1 | https://scan.sv-1.global.canton.network.fivenorth.io |
+| 9 | Proof-Group-1 | https://scan.sv-1.global.canton.network.proofgroup.xyz |
+| 10 | C7-Technology-Services-Limited | https://scan.sv-1.global.canton.network.c7.digital |
+| 11 | Liberty-City-Ventures-1 | https://scan.sv-1.global.canton.network.lcv.mpch.io |
+| 12 | Orb-1-LP-1 | https://scan.sv-1.global.canton.network.orb1lp.mpch.io |
+| 13 | SV-Nodeops-Limited | https://scan.sv.global.canton.network.sv-nodeops.com |
 
 ## Data Flow
 
-1. **Cloud Scheduler** triggers the Cloud Function every 15 minutes
-2. **Cloud Function** queries BigQuery for last processed position
-3. **Cloud Function** fetches new updates from Scan API (incremental)
-4. **Cloud Function** inserts raw events into `raw.events` table
-5. **Cloud Function** runs transformation to update `transformed.events_parsed`
+1. **Cloud Scheduler** triggers the Cloud Run service every 15 minutes (with OIDC authentication)
+2. **Cloud Run** routes traffic through VPC Connector → Cloud NAT (static IP)
+3. **Cloud Run** tries SV nodes in order until one responds (10s timeout each)
+4. **Cloud Run** queries BigQuery state table for last processed position
+5. **Cloud Run** fetches new events from Scan API `/v0/events` endpoint (incremental)
+6. **Cloud Run** inserts raw events into `raw.events` table via streaming API
+7. **Cloud Run** updates `raw.ingestion_state` table with new position
+8. **BigQuery Scheduled Query** transforms raw data to `transformed.events_parsed`
 
 ## Components
 
-### 1. Data Ingestion Pipeline (`src/data_ingestion_pipeline.py`)
+### 1. Data Ingestion Pipeline (`cloud_run/data_ingestion/data_ingestion_pipeline.py`)
 
 Main orchestration module that:
-- Fetches updates from Canton Scan API using `/v2/updates` endpoint
+- Fetches events from Canton Scan API using `/v0/events` endpoint
 - Extracts individual events from transaction updates
-- Inserts raw events into BigQuery
-- Triggers transformation to parsed table
+- Maps API fields to BigQuery schema (e.g., `record_time` → `recorded_at`)
+- Converts party arrays to BigQuery nested format `{list: [{element: "..."}]}`
+- Inserts raw events into BigQuery via streaming API
+- Updates state table for efficient incremental loading
 
-### 2. BigQuery Client (`src/bigquery_client.py`)
+### 2. Scan API Client (`cloud_run/data_ingestion/canton_scan_client.py`)
+
+HTTP client with automatic failover:
+- Tries 13 MainNet SV node URLs in sequence
+- 10-second timeout per node for fast failover
+- Caches working URL for subsequent requests
+- Automatic retry with exponential backoff
+
+### 3. BigQuery Client (`cloud_run/data_ingestion/bigquery_client.py`)
 
 Handles all BigQuery operations:
-- Get last processed position (for incremental loading)
+- Get last processed position from state table (O(1) lookup)
+- Fallback to MAX() query if state not found
 - Insert raw events via streaming API
 - Run transformation queries
 - Check pipeline status
 
-### 3. Cloud Function (`cloud_functions/data_ingestion/main.py`)
+### 4. Cloud Run Service (`cloud_run/data_ingestion/main.py`)
 
-HTTP-triggered serverless function with three endpoints:
-- `ingest_data`: Main ingestion endpoint (called by scheduler)
-- `transform_data`: Manual transformation trigger
-- `get_status`: Pipeline status check
+Flask-based HTTP service with endpoints:
+- `GET /`: Health check
+- `POST /ingest`: Main ingestion endpoint (called by scheduler)
+- `POST /transform`: Manual transformation trigger
+- `GET /status`: Pipeline status check
+
+### 5. Network Infrastructure
+
+| Component | Configuration | Purpose |
+|-----------|--------------|---------|
+| VPC Connector | `canton-connector` | Routes Cloud Run traffic through VPC |
+| Cloud Router | `canton-router` | Manages NAT routing |
+| Cloud NAT | `canton-nat` | Provides static egress IP |
+| Static IP | `34.132.24.144` | Whitelisted by SV node operators |
 
 ## BigQuery Tables
 
@@ -124,20 +195,88 @@ cd bigquery_scheduled
 ./setup_scheduled_query.sh
 ```
 
-### Option 3: Cloud Run (Containerized)
+### Option 3: Cloud Run (Containerized) - RECOMMENDED
 
-Deploy as a containerized service on Cloud Run.
+Deploy as a containerized service on Cloud Run with VPC egress for IP whitelisting.
 
 **Prerequisites:**
 - Cloud Run API enabled
 - Cloud Build API enabled
 - Artifact Registry API enabled
+- VPC Access API enabled
+- Cloud NAT configured with static IP
 
-**Deploy:**
+**Network Setup (one-time):**
+```bash
+# Create VPC connector
+gcloud compute networks vpc-access connectors create canton-connector \
+    --region=us-central1 \
+    --network=default \
+    --range=10.8.0.0/28 \
+    --project=governence-483517
+
+# Create Cloud Router
+gcloud compute routers create canton-router \
+    --network=default \
+    --region=us-central1 \
+    --project=governence-483517
+
+# Reserve static IP
+gcloud compute addresses create canton-nat-ip \
+    --region=us-central1 \
+    --project=governence-483517
+
+# Create Cloud NAT with static IP
+gcloud compute routers nats create canton-nat \
+    --router=canton-router \
+    --region=us-central1 \
+    --nat-external-ip-pool=canton-nat-ip \
+    --nat-all-subnet-ip-ranges \
+    --project=governence-483517
+
+# Get the static IP (send to SV operators for whitelisting)
+gcloud compute addresses describe canton-nat-ip \
+    --region=us-central1 \
+    --format='value(address)' \
+    --project=governence-483517
+```
+
+**Deploy Cloud Run:**
 ```bash
 cd cloud_run/data_ingestion
 ./deploy.sh
-./setup_scheduler.sh
+```
+
+**Set up Cloud Scheduler with OIDC Authentication:**
+```bash
+# Create service account for scheduler
+gcloud iam service-accounts create scheduler-invoker \
+    --display-name="Cloud Scheduler Invoker" \
+    --project=governence-483517
+
+# Grant Cloud Run invoker role
+gcloud run services add-iam-policy-binding canton-data-ingestion \
+    --region=us-central1 \
+    --member="serviceAccount:scheduler-invoker@governence-483517.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --project=governence-483517
+
+# Create scheduler job with OIDC authentication
+gcloud scheduler jobs create http canton-data-ingestion-scheduler \
+    --location=us-central1 \
+    --schedule="*/15 * * * *" \
+    --uri="https://canton-data-ingestion-224112423672.us-central1.run.app/ingest" \
+    --http-method=POST \
+    --time-zone="UTC" \
+    --project=governence-483517 \
+    --headers="Content-Type=application/json" \
+    --message-body='{"max_pages": 100, "auto_transform": true}' \
+    --oidc-service-account-email="scheduler-invoker@governence-483517.iam.gserviceaccount.com"
+```
+
+**Manual Trigger:**
+```bash
+gcloud scheduler jobs run canton-data-ingestion-scheduler --location=us-central1
 ```
 
 ### Option 4: Cloud Functions (Serverless)
@@ -177,19 +316,24 @@ gcloud services enable bigquery.googleapis.com --project governence-483517
 
 ### Environment Variables
 
-Configure these environment variables for the Cloud Function:
+Configure these environment variables for Cloud Run:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCAN_API_BASE_URL` | `https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/` | Scan API base URL |
+| `SCAN_API_BASE_URL` | `https://scan.sv-1.global.canton.network.sync.global/api/scan/` | MainNet Scan API base URL |
+| `SCAN_API_TIMEOUT` | `60` | API request timeout (seconds) |
+| `SCAN_API_MAX_RETRIES` | `3` | Max retries per request |
 | `BQ_PROJECT_ID` | `governence-483517` | BigQuery project ID |
 | `BQ_RAW_DATASET` | `raw` | Raw events dataset |
 | `BQ_TRANSFORMED_DATASET` | `transformed` | Transformed events dataset |
 | `BQ_RAW_TABLE` | `events` | Raw events table name |
 | `BQ_PARSED_TABLE` | `events_parsed` | Parsed events table name |
-| `PAGE_SIZE` | `500` | Updates per API call |
+| `PAGE_SIZE` | `500` | Events per API call |
 | `MAX_PAGES_PER_RUN` | `100` | Max pages per execution |
+| `BATCH_SIZE` | `100` | BigQuery insert batch size |
 | `AUTO_TRANSFORM` | `true` | Auto-run transformation |
+
+**Note:** The pipeline automatically tries all 13 SV node URLs regardless of `SCAN_API_BASE_URL` when failover is enabled.
 
 ## Manual Operations
 
@@ -344,7 +488,7 @@ config = PipelineConfig(
 
 ### Scan API Endpoint
 
-**POST /v2/updates**
+**POST /v0/events** (Primary endpoint for MainNet)
 
 Request:
 ```json
@@ -352,8 +496,8 @@ Request:
     "page_size": 500,
     "daml_value_encoding": "compact_json",
     "after": {
-        "after_migration_id": 0,
-        "after_record_time": "2024-01-01T00:00:00Z"
+        "after_migration_id": 4,
+        "after_record_time": "2026-01-27T09:24:02.486Z"
     }
 }
 ```
@@ -361,18 +505,29 @@ Request:
 Response:
 ```json
 {
-    "transactions": [
+    "events": [
         {
-            "migration_id": 0,
-            "record_time": "2024-01-01T00:00:01Z",
-            "synchronizer_id": "...",
-            "update_id": "...",
-            "effective_at": "2024-01-01T00:00:01Z",
-            "events_by_id": {...}
+            "update": {
+                "migration_id": 4,
+                "record_time": "2026-01-27T09:24:03.000Z",
+                "synchronizer_id": "...",
+                "update_id": "...",
+                "effective_at": "2026-01-27T09:24:03.000Z",
+                "events_by_id": {
+                    "event_id_1": {
+                        "event_type": "created",
+                        "contract_id": "...",
+                        "template_id": "...",
+                        "create_arguments": {...}
+                    }
+                }
+            }
         }
     ]
 }
 ```
+
+**Note:** The `/v2/updates` endpoint is also available but `/v0/events` is recommended for MainNet.
 
 ### Schema Mapping
 
