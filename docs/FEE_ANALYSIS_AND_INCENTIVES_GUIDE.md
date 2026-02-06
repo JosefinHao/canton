@@ -292,13 +292,13 @@ def calculate_annual_holding_cost(num_utxos, total_balance):
 
 ### 4.1 Available Leaderboard Endpoints
 
-| Endpoint | Returns | Use Case |
-|----------|---------|----------|
-| `GET /v0/top-providers-by-app-rewards` | Top app providers by rewards | Featured App leaderboard |
-| `GET /v0/top-validators-by-validator-rewards` | Top validators by rewards | Validator leaderboard |
-| `GET /v0/top-validators-by-validator-faucets` | Top validators by faucet rounds | Liveness leaderboard |
-| `GET /v0/top-validators-by-purchased-traffic` | Top validators by traffic | Traffic purchaser leaderboard |
-| `GET /v0/featured-apps` | All featured apps | Featured status list |
+| Endpoint | Returns | Use Case | MainNet Status |
+|----------|---------|----------|----------------|
+| `GET /v0/top-providers-by-app-rewards` | Top app providers by rewards | Featured App leaderboard | Deprecated |
+| `GET /v0/top-validators-by-validator-rewards` | Top validators by rewards | Validator leaderboard | Deprecated |
+| `GET /v0/top-validators-by-validator-faucets` | Top validators by faucet rounds | Liveness leaderboard | Active |
+| `GET /v0/top-validators-by-purchased-traffic` | Top validators by traffic | Traffic purchaser leaderboard | Deprecated |
+| `GET /v0/featured-apps` | All featured apps | Featured status list | Active |
 
 ### 4.2 Fee Concentration Analysis
 
@@ -670,11 +670,15 @@ def track_incentive_changes(client: SpliceScanClient, round_range: int = 1000):
 
 ## 6. API Endpoints for Fee Analysis
 
+> **Note (MainNet)**: Several endpoints below are deprecated in the MainNet API. They remain functional but may be removed in future releases. See [API Reference](./API_REFERENCE.md) for the full deprecation table with replacements.
+
 ### 6.1 Fee Configuration
 
 ```bash
 GET /v0/amulet-config-for-round?round={round_number}
 ```
+
+> **Deprecated** in MainNet. Use `POST /v0/amulet-rules` for current configuration.
 
 Returns fee schedule parameters:
 ```json
@@ -924,7 +928,7 @@ ECONOMIC DIFFERENCE:
 ## References
 
 - [Canton Coin Whitepaper](https://www.canton.network/hubfs/Canton%20Network%20Files/Documents%20(whitepapers,%20etc...)/Canton%20Coin_%20A%20Canton-Network-native%20payment%20application.pdf)
-- Scan Open API Reference (to be replaced with MainNet version)
+- [Scan Open API Reference (MainNet)](../Scan%20Open%20API%20Reference%20—%20Splice%20documentation.pdf)
 - [Featured App Rewards Guide](./FEATURED_APP_REWARDS_GUIDE.md)
 - [Validator Rewards Guide](./VALIDATOR_REWARDS_GUIDE.md)
 - [API Reference](./API_REFERENCE.md)
