@@ -118,19 +118,16 @@ class SpliceScanClient:
                 logger.warning(f"Cached URL failed: {e}, will try other URLs")
                 self._working_url = None
 
-        # Try the primary base_url first
-        urls_to_try = [self.base_url]
-
-        # Add failover URLs if enabled
+        # Use the full SV node list for failover
         if self.use_failover:
-            for url in MAINNET_SV_URLS:
-                if url.rstrip('/') != self.base_url.rstrip('/') and url.rstrip('/') not in [u.rstrip('/') for u in urls_to_try]:
-                    urls_to_try.append(url.rstrip('/'))
+            urls_to_try = [url.rstrip('/') for url in MAINNET_SV_URLS]
+        else:
+            urls_to_try = [self.base_url]
 
         last_error = None
         for i, base_url in enumerate(urls_to_try):
-            # Use shorter timeout for failover attempts (not the first URL)
-            use_timeout = self.failover_timeout if i > 0 else self.timeout
+            # Use shorter timeout for faster failover (10s each)
+            use_timeout = self.failover_timeout
             try:
                 logger.info(f"Trying SV node ({i+1}/{len(urls_to_try)}): {base_url} (timeout={use_timeout}s)")
                 result = self._make_single_request(
