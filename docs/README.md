@@ -733,8 +733,10 @@ canton/
 │   └── splice_insights.py               # Insights CLI script
 ├── docs/
 │   ├── README.md                        # This file
+│   ├── TRANSACTION_TYPES.md             # Transaction types guide
 │   ├── FEATURED_APP_REWARDS_GUIDE.md    # Featured app rewards guide
 │   ├── VALIDATOR_REWARDS_GUIDE.md       # Validator rewards guide
+│   ├── FEE_ANALYSIS_AND_INCENTIVES_GUIDE.md # Fee analysis and incentives
 │   ├── ANALYTICS_DIAGNOSTIC_README.md   # Analytics diagnostics guide
 │   ├── UPDATE_TREE_PROCESSING.md        # Update tree processing docs
 │   ├── ROUND_PARTY_TOTALS_MIGRATION.md  # Migration guide
