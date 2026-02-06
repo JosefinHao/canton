@@ -50,13 +50,16 @@ Canton Coin users pay **two categories** of fees:
 
 Incentives are **minted** to participants as rewards for providing network value:
 
-| Incentive Type | Recipient | Cap/Multiplier |
-|----------------|-----------|----------------|
-| **App Rewards (Featured)** | Featured App Providers | Up to 100x fees burned |
-| **App Rewards (Unfeatured)** | Unfeatured App Providers | Up to 0.8x fees burned (80%) |
-| **Validator Rewards** | Validators (coin usage) | 0.2x activity weight |
-| **Validator Faucet** | Validators (liveness) | ~$150K/year cap at launch |
-| **SV Rewards** | Super Validators | Fixed % of tranche |
+| Incentive Type | Recipient | Cap/Multiplier | Status |
+|----------------|-----------|----------------|--------|
+| **App Rewards (Featured)** | Featured App Providers | Up to 100x fees burned | Active |
+| **Validator Rewards** | Validators (coin usage) | 0.2x activity weight | Active |
+| **SV Rewards** | Super Validators | Fixed % of tranche | Active |
+
+> **Note: Recent Changes**
+> - **Un-featured app rewards have been removed.** Previously, un-featured apps could mint up to 0.8x of fees burned. Only featured apps now receive minting rewards.
+> - **Validator liveness fees (faucet) are being phased out.** The validator faucet mechanism that rewarded validators for liveness participation is being deprecated.
+> - **Featured apps** now primarily pay **traffic fees** and **holding fees** only.
 
 ### 1.3 The Burn-Mint Equilibrium
 
@@ -166,10 +169,11 @@ def calculate_net_fees_for_round(round_data):
 | **REWARDS MINTED** | | |
 | Validator Reward | $0.39 | $1.93 × 0.2 (cap) |
 | App Reward (Featured) | $2.93 | $1.93 + $1.00 bonus |
-| Validator Liveness | $2.01 | If eligible |
-| **Total Rewards** | **$5.33** | |
+| **Total Rewards** | **$3.32** | |
 | | | |
-| **NET RESULT** | **-$3.37** | Negative = net mint |
+| **NET RESULT** | **-$1.36** | Negative = net mint |
+
+> **Note**: Validator liveness (faucet) rewards are being phased out and are no longer included in this calculation.
 
 **Interpretation**: In early network phases, featured apps and validators receive MORE in rewards than users pay in fees, resulting in **net minting** (inflation).
 
@@ -492,6 +496,10 @@ def calculate_fee_impact_over_time(
 ):
     """
     Calculate effective fees at different network phases.
+
+    Note: Only featured apps receive minting rewards. Un-featured apps
+    no longer receive any rewards. Validator liveness (faucet) rewards
+    are being phased out and are not included.
     """
     # Minting curve parameters
     phases = [
@@ -511,8 +519,8 @@ def calculate_fee_impact_over_time(
         app_pool = phase['tranche_usd'] * phase['app_pct']
         val_pool = phase['tranche_usd'] * phase['val_pct']
 
-        # Cap calculations
-        cap_fa = 100.0 if is_featured else 0.6
+        # Cap calculations - only featured apps get rewards
+        cap_fa = 100.0 if is_featured else 0.0  # Un-featured apps get no rewards
         cap_v = 0.2
 
         # Estimated rewards (assuming low competition in early phases)
@@ -561,15 +569,13 @@ For a **$1,000 transfer via Featured App**:
 | Mature (5-10yr) | $1.96 | $65.52 | **-$63.56** | -6.36% (NET MINT) |
 | Steady (10+yr) | $1.96 | $35.70 | **-$33.74** | -3.37% (NET MINT) |
 
-For a **$1,000 transfer via Unfeatured App**:
+For a **$1,000 transfer via Un-featured App**:
+
+> **Note**: Un-featured apps no longer receive rewards. The full raw fee applies.
 
 | Phase | Raw Fee | Rewards | Net Fee | Effective Rate |
 |-------|---------|---------|---------|----------------|
-| Bootstrap | $1.96 | $1.55 | **$0.41** | 0.04% |
-| Early | $1.96 | $1.55 | **$0.41** | 0.04% |
-| Growth | $1.96 | $1.55 | **$0.41** | 0.04% |
-| Mature | $1.96 | $1.35 | **$0.61** | 0.06% |
-| Steady | $1.96 | $0.91 | **$1.05** | 0.11% |
+| All Phases | $1.96 | $0.00 | **$1.96** | 0.20% |
 
 ### 5.4 Key Observations on Fee Behavior
 
@@ -579,11 +585,13 @@ For a **$1,000 transfer via Unfeatured App**:
    - Early: More rewards minted than fees burned (inflationary)
    - Late: Burn-mint equilibrium approaches (stable supply)
 
-3. **Unfeatured Apps Break Even Earlier**: With only 0.6x cap, unfeatured apps see positive net fees sooner
+3. **Un-featured Apps Pay Full Fees**: Un-featured apps no longer receive rewards, so users pay the full raw fee
 
-4. **Validator Liveness Decreases**: As activity increases, liveness rewards diminish relative to usage rewards
+4. **Validator Liveness Being Phased Out**: Liveness (faucet) rewards are being deprecated
 
 5. **SV Concentration Decreases**: SV share drops from 80% to 5% over 10 years
+
+6. **Featured Apps Pay Traffic + Holding Fees Only**: Featured apps are subject to traffic fees and holding fees, but no longer to liveliness fees
 
 ### 5.5 Monitoring Incentive Changes via API
 
@@ -800,18 +808,21 @@ def analyze_network_fees(client: SpliceScanClient, num_rounds: int = 100):
     }
 ```
 
-### 7.2 Example: Compare Featured vs Unfeatured Economics
+### 7.2 Example: Compare Featured vs Un-featured Economics
+
+> **Note**: Un-featured apps no longer receive rewards. This comparison shows the economic advantage of Featured status.
 
 ```python
 def compare_app_economics(transfer_amount: float = 1000):
     """
-    Compare economic outcomes for featured vs unfeatured apps.
+    Compare economic outcomes for featured vs un-featured apps.
+    Un-featured apps no longer receive any minting rewards.
     """
     # Calculate raw fees
     raw_fee = 1.96  # For $1000 transfer (pre-calculated)
     activity_weight = raw_fee - 0.03  # Exclude change output fee
 
-    print(f"=== Featured vs Unfeatured App Comparison ===")
+    print(f"=== Featured vs Un-featured App Comparison ===")
     print(f"Transfer Amount: ${transfer_amount:,.2f}")
     print(f"Raw Fees Burned: ${raw_fee:.2f}")
     print(f"Activity Weight: ${activity_weight:.2f}")
@@ -830,26 +841,23 @@ def compare_app_economics(transfer_amount: float = 1000):
     print(f"  (Negative = app/validator profits exceed user fees)")
     print()
 
-    # Unfeatured App (0.6x cap)
-    unfeatured_reward = activity_weight * 0.6  # 0.6x = 60% cap
-    unfeatured_net = raw_fee - unfeatured_reward - (activity_weight * 0.2)
-
-    print("UNFEATURED APP:")
+    # Un-featured App (NO rewards)
+    print("UN-FEATURED APP:")
     print(f"  Activity Weight: ${activity_weight:.2f}")
-    print(f"  Max App Reward (0.6x): ${unfeatured_reward:.2f}")
+    print(f"  App Reward: $0.00 (un-featured apps no longer receive rewards)")
     print(f"  Validator Reward (0.2x): ${activity_weight * 0.2:.2f}")
-    print(f"  NET RESULT: ${unfeatured_net:.2f}")
+    print(f"  NET RESULT: ${raw_fee - (activity_weight * 0.2):.2f}")
     print(f"  (Positive = network captures net fees)")
     print()
 
     print("ECONOMIC DIFFERENCE:")
-    print(f"  Featured advantage: ${unfeatured_net - featured_net:.2f} per transaction")
+    print(f"  Featured apps receive minting rewards; un-featured apps do not.")
     print(f"  This is why Featured status requires 2/3 SV vote!")
 ```
 
 Output:
 ```
-=== Featured vs Unfeatured App Comparison ===
+=== Featured vs Un-featured App Comparison ===
 Transfer Amount: $1,000.00
 Raw Fees Burned: $1.96
 Activity Weight: $1.93
@@ -861,15 +869,15 @@ FEATURED APP:
   NET RESULT: $-191.43
   (Negative = app/validator profits exceed user fees)
 
-UNFEATURED APP:
+UN-FEATURED APP:
   Activity Weight: $1.93
-  Max App Reward (0.6x): $1.16
+  App Reward: $0.00 (un-featured apps no longer receive rewards)
   Validator Reward (0.2x): $0.39
-  NET RESULT: $0.41
+  NET RESULT: $1.57
   (Positive = network captures net fees)
 
 ECONOMIC DIFFERENCE:
-  Featured advantage: $191.84 per transaction
+  Featured apps receive minting rewards; un-featured apps do not.
   This is why Featured status requires 2/3 SV vote!
 ```
 
@@ -896,7 +904,12 @@ ECONOMIC DIFFERENCE:
 4. **Incentive Evolution**
    - SV share: 80% → 5% over 10 years
    - App share: 15% → 75% over 10 years
-   - Featured apps get 100x vs 0.6x for unfeatured
+   - Only featured apps receive minting rewards (up to 100x)
+   - Un-featured apps no longer receive rewards
+
+5. **Current Fee Structure for Featured Apps**
+   - Featured apps pay **traffic fees** and **holding fees**
+   - Liveliness fees are being phased out
 
 ### Monitoring Checklist
 
@@ -911,7 +924,7 @@ ECONOMIC DIFFERENCE:
 ## References
 
 - [Canton Coin Whitepaper](https://www.canton.network/hubfs/Canton%20Network%20Files/Documents%20(whitepapers,%20etc...)/Canton%20Coin_%20A%20Canton-Network-native%20payment%20application.pdf)
-- [Scan Open API Reference](./Scan%20Open%20API%20Reference%20—%20Splice%20documentation.pdf)
+- Scan Open API Reference (to be replaced with MainNet version)
 - [Featured App Rewards Guide](./FEATURED_APP_REWARDS_GUIDE.md)
 - [Validator Rewards Guide](./VALIDATOR_REWARDS_GUIDE.md)
 - [API Reference](./API_REFERENCE.md)
