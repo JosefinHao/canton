@@ -924,7 +924,7 @@ ECONOMIC DIFFERENCE:
 ## References
 
 - [Canton Coin Whitepaper](https://www.canton.network/hubfs/Canton%20Network%20Files/Documents%20(whitepapers,%20etc...)/Canton%20Coin_%20A%20Canton-Network-native%20payment%20application.pdf)
-- [Scan Open API Reference](./Scan%20Open%20API%20Reference%20—%20Splice%20documentation.pdf)
+- Scan Open API Reference (to be replaced with MainNet version)
 - [Featured App Rewards Guide](./FEATURED_APP_REWARDS_GUIDE.md)
 - [Validator Rewards Guide](./VALIDATOR_REWARDS_GUIDE.md)
 - [API Reference](./API_REFERENCE.md)
