@@ -15,6 +15,237 @@ This document describes the automated data ingestion pipeline that fetches block
 | Cloud Scheduler | ✅ Done | Triggers ingestion every 15 minutes with OIDC auth |
 | IP Whitelisting | ⏳ Pending | Static IP 34.132.24.144 needs whitelisting by SV operators |
 
+---
+
+### Step 1: Cloud Run for Scan API Ingestion
+
+**Purpose:** Containerized service that fetches blockchain events from Canton Scan API and loads them into BigQuery.
+
+**Key Features:**
+- **Automatic SV Node Failover:** Tries 13 MainNet Super Validator nodes in sequence until one responds
+- **Fast Failover:** 10-second timeout per node (total ~2-3 minutes to try all nodes)
+- **URL Caching:** Once a working SV node is found, it's cached for subsequent requests
+- **Incremental Loading:** Uses `(migration_id, recorded_at)` cursor to fetch only new events
+- **State Table Optimization:** O(1) position lookup via `raw.ingestion_state` table (avoids 10+ TB scans)
+
+**Service Configuration:**
+| Setting | Value |
+|---------|-------|
+| Service Name | `canton-data-ingestion` |
+| Region | `us-central1` |
+| Memory | 512 MB |
+| CPU | 1 |
+| Max Instances | 1 |
+| Timeout | 300s |
+| VPC Connector | `canton-connector` |
+| Egress | All traffic through VPC |
+
+**Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Health check |
+| `/ingest` | POST | Main ingestion (fetches events, inserts to BigQuery) |
+| `/transform` | POST | Run transformation only |
+| `/status` | GET | Pipeline status and last processed position |
+
+**Files:**
+- `cloud_run/data_ingestion/main.py` - Flask HTTP service
+- `cloud_run/data_ingestion/data_ingestion_pipeline.py` - Orchestration logic
+- `cloud_run/data_ingestion/canton_scan_client.py` - API client with failover
+- `cloud_run/data_ingestion/bigquery_client.py` - BigQuery operations
+- `cloud_run/data_ingestion/Dockerfile` - Container definition
+- `cloud_run/data_ingestion/deploy.sh` - Deployment script
+
+---
+
+### Step 2: Network Configuration (Cloud NAT + VPC Connector)
+
+**Purpose:** Route Cloud Run egress traffic through a static IP address for whitelisting by SV node operators.
+
+**Problem Solved:**
+- Cloud Run uses dynamic IPs by default, which cannot be whitelisted
+- MainNet SV nodes require IP whitelisting for API access
+- Solution: VPC Connector → Cloud NAT → Static IP
+
+**Components:**
+
+| Component | Name | Configuration |
+|-----------|------|---------------|
+| VPC Connector | `canton-connector` | Network: `default`, IP Range: `10.8.0.0/28`, Region: `us-central1` |
+| Cloud Router | `canton-router` | Network: `default`, Region: `us-central1` |
+| Cloud NAT | `canton-nat` | Router: `canton-router`, Source: All subnets, IP: Manual |
+| Static IP | `canton-nat-ip` | Address: `34.132.24.144`, Type: External, Status: IN_USE |
+
+**Traffic Flow:**
+```
+Cloud Run Service
+       │
+       ▼
+VPC Connector (canton-connector)
+       │
+       ▼
+Cloud Router (canton-router)
+       │
+       ▼
+Cloud NAT (canton-nat)
+       │
+       ▼
+Static IP: 34.132.24.144
+       │
+       ▼
+Internet → SV Node APIs
+```
+
+**Verification Commands:**
+```bash
+# Check VPC connector
+gcloud compute networks vpc-access connectors describe canton-connector \
+    --region=us-central1 --project=governence-483517
+
+# Check Cloud NAT
+gcloud compute routers nats describe canton-nat \
+    --router=canton-router --region=us-central1 --project=governence-483517
+
+# Check static IP
+gcloud compute addresses describe canton-nat-ip \
+    --region=us-central1 --format='value(address)' --project=governence-483517
+```
+
+---
+
+### Step 3: Data Transformation Pipeline (BigQuery Scheduled Query)
+
+**Purpose:** Transform raw STRING data in `raw.events` to properly typed data in `transformed.events_parsed`.
+
+**Transformation Logic:**
+- Parse STRING timestamps to TIMESTAMP type
+- Convert STRING integers to INT64
+- Convert STRING booleans to BOOL
+- Parse JSON strings to JSON type
+- Handle nested array structures
+- Add partitioning and clustering for query performance
+
+**Source Table:** `governence-483517.raw.events`
+- All fields stored as STRING for maximum flexibility
+- ~10+ TB of historical data
+
+**Target Table:** `governence-483517.transformed.events_parsed`
+- Properly typed fields (TIMESTAMP, INT64, BOOL, JSON)
+- Partitioned by `DATE(timestamp)`
+- Clustered by `template_id`, `event_type`, `migration_id`
+
+**Scheduled Query Configuration:**
+| Setting | Value |
+|---------|-------|
+| Name | `transform_raw_events` |
+| Schedule | Every 15 minutes |
+| Location | US |
+| Write Disposition | WRITE_APPEND (incremental) |
+
+**SQL File:** `bigquery_scheduled/transform_events.sql`
+
+**Key Transformations:**
+```sql
+-- Timestamp parsing
+SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', recorded_at) AS recorded_at,
+
+-- Integer conversion
+SAFE_CAST(migration_id AS INT64) AS migration_id,
+
+-- Boolean conversion
+SAFE_CAST(consuming AS BOOL) AS consuming,
+
+-- JSON parsing
+SAFE.PARSE_JSON(payload) AS payload,
+```
+
+**Setup Commands:**
+```bash
+# Via CLI
+cd bigquery_scheduled
+./setup_scheduled_query.sh
+
+# Or via Console
+# 1. Go to BigQuery Console → Scheduled queries
+# 2. Create new scheduled query
+# 3. Paste transform_events.sql content
+# 4. Set schedule to "every 15 minutes"
+```
+
+---
+
+### Step 4: Cloud Scheduler with OIDC Authentication
+
+**Purpose:** Trigger the Cloud Run ingestion service every 15 minutes with secure authentication.
+
+**Why OIDC Authentication:**
+- Cloud Run requires authentication by default (not publicly accessible)
+- OIDC tokens provide secure service-to-service authentication
+- No need to expose the service publicly
+
+**Components:**
+
+| Component | Name | Purpose |
+|-----------|------|---------|
+| Service Account | `scheduler-invoker@governence-483517.iam.gserviceaccount.com` | Identity for scheduler |
+| IAM Binding | `roles/run.invoker` | Permission to invoke Cloud Run |
+| Scheduler Job | `canton-data-ingestion-scheduler` | Triggers ingestion every 15 min |
+
+**Scheduler Job Configuration:**
+| Setting | Value |
+|---------|-------|
+| Name | `canton-data-ingestion-scheduler` |
+| Region | `us-central1` |
+| Schedule | `*/15 * * * *` (every 15 minutes) |
+| Time Zone | UTC |
+| HTTP Method | POST |
+| Target URL | `https://canton-data-ingestion-224112423672.us-central1.run.app/ingest` |
+| Auth Type | OIDC Token |
+| Service Account | `scheduler-invoker@governence-483517.iam.gserviceaccount.com` |
+
+**Request Body:**
+```json
+{
+    "max_pages": 100,
+    "auto_transform": true
+}
+```
+
+**Management Commands:**
+```bash
+# View job status
+gcloud scheduler jobs describe canton-data-ingestion-scheduler --location=us-central1
+
+# Trigger manually
+gcloud scheduler jobs run canton-data-ingestion-scheduler --location=us-central1
+
+# Pause job
+gcloud scheduler jobs pause canton-data-ingestion-scheduler --location=us-central1
+
+# Resume job
+gcloud scheduler jobs resume canton-data-ingestion-scheduler --location=us-central1
+
+# View execution history
+gcloud logging read "resource.type=cloud_scheduler_job" --limit=20 --project=governence-483517
+```
+
+**Monitoring:**
+```bash
+# View Cloud Run logs
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=canton-data-ingestion" \
+    --limit=50 --project=governence-483517 --format="table(timestamp,textPayload)"
+
+# Check for errors
+gcloud logging read "resource.type=cloud_run_revision AND severity>=ERROR" \
+    --limit=20 --project=governence-483517
+
+# View SV node failover progress
+gcloud logging read "resource.type=cloud_run_revision AND textPayload:\"Trying SV node\"" \
+    --limit=30 --project=governence-483517
+```
+
+---
+
 ## Architecture
 
 ```
