@@ -39,18 +39,21 @@ class SpliceScanClient:
         base_url: str,
         timeout: int = 30,
         max_retries: int = 3,
-        use_failover: bool = True
+        use_failover: bool = True,
+        failover_timeout: int = 10  # Shorter timeout for failover attempts
     ):
         """Initialize the Scan API client."""
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.failover_timeout = failover_timeout
         self.use_failover = use_failover
         self._working_url: Optional[str] = None
 
         self.session = requests.Session()
+        # Reduced retries for faster failover
         retry_strategy = Retry(
-            total=max_retries,
-            backoff_factor=1,
+            total=1,  # Only 1 retry per URL for faster failover
+            backoff_factor=0.5,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS", "POST"]
         )
@@ -65,10 +68,12 @@ class SpliceScanClient:
         method: str,
         endpoint: str,
         params: Optional[Dict] = None,
-        json_data: Optional[Dict] = None
+        json_data: Optional[Dict] = None,
+        timeout: Optional[int] = None
     ) -> Dict[str, Any]:
         """Make a single request to a specific base URL."""
         url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+        use_timeout = timeout or self.timeout
 
         request_headers = None
         if json_data is not None:
@@ -80,7 +85,7 @@ class SpliceScanClient:
             params=params,
             json=json_data,
             headers=request_headers,
-            timeout=self.timeout
+            timeout=use_timeout
         )
         response.raise_for_status()
 
@@ -104,7 +109,10 @@ class SpliceScanClient:
         if self._working_url:
             try:
                 logger.info(f"Trying cached working URL: {self._working_url}")
-                result = self._make_single_request(self._working_url, method, endpoint, params, json_data)
+                result = self._make_single_request(
+                    self._working_url, method, endpoint, params, json_data,
+                    timeout=self.timeout
+                )
                 return result
             except Exception as e:
                 logger.warning(f"Cached URL failed: {e}, will try other URLs")
@@ -120,29 +128,34 @@ class SpliceScanClient:
                     urls_to_try.append(url.rstrip('/'))
 
         last_error = None
-        for base_url in urls_to_try:
+        for i, base_url in enumerate(urls_to_try):
+            # Use shorter timeout for failover attempts (not the first URL)
+            use_timeout = self.failover_timeout if i > 0 else self.timeout
             try:
-                logger.info(f"Trying SV node: {base_url}")
-                result = self._make_single_request(base_url, method, endpoint, params, json_data)
+                logger.info(f"Trying SV node ({i+1}/{len(urls_to_try)}): {base_url} (timeout={use_timeout}s)")
+                result = self._make_single_request(
+                    base_url, method, endpoint, params, json_data,
+                    timeout=use_timeout
+                )
                 # Success! Cache this URL for future requests
                 self._working_url = base_url
                 logger.info(f"Successfully connected to: {base_url}")
                 return result
             except requests.exceptions.Timeout as e:
-                logger.warning(f"Timeout connecting to {base_url}: {e}")
+                logger.warning(f"Timeout connecting to {base_url}")
                 last_error = e
             except requests.exceptions.ConnectionError as e:
-                logger.warning(f"Connection error to {base_url}: {e}")
+                logger.warning(f"Connection error to {base_url}")
                 last_error = e
             except requests.exceptions.HTTPError as e:
-                logger.warning(f"HTTP error from {base_url}: {e}")
+                logger.warning(f"HTTP error from {base_url}: {e.response.status_code if e.response else 'unknown'}")
                 last_error = e
             except Exception as e:
-                logger.warning(f"Error from {base_url}: {e}")
+                logger.warning(f"Error from {base_url}: {type(e).__name__}")
                 last_error = e
 
         # All URLs failed
-        logger.error(f"All SV node URLs failed. Last error: {last_error}")
+        logger.error(f"All {len(urls_to_try)} SV node URLs failed. Last error: {last_error}")
         raise last_error or Exception("All SV node URLs failed")
 
     def get_updates(
