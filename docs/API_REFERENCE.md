@@ -412,25 +412,69 @@ This document provides a reference of all available endpoints in the `SpliceScan
 ## Health/Status Endpoints
 
 ### `health_check()`
-**Endpoint:** `GET /v0/dso` (used as health check)
+**Endpoint:** `GET /readyz` (with fallback to `GET /v0/dso`)
 **Description:** Check if the API is accessible. Returns True if API is healthy, False otherwise.
+
+### `get_readiness()`
+**Endpoint:** `GET /readyz`
+**Description:** Check if the service is ready to accept requests.
+
+### `get_liveness()`
+**Endpoint:** `GET /livez`
+**Description:** Check if the service is alive.
+
+### `get_status()`
+**Endpoint:** `GET /status`
+**Description:** Get detailed service status including id, uptime, ports, extra, and active fields.
+
+### `get_version()`
+**Endpoint:** `GET /version`
+**Description:** Get the service version and commit timestamp.
+
+---
+
+## Deprecated Endpoints (MainNet)
+
+The following endpoints are marked as **deprecated** in the MainNet Scan Open API Reference. They remain functional but may be removed in future releases. The client implements `get_round_party_totals()` which uses one of these deprecated endpoints.
+
+| Deprecated Endpoint | Replacement |
+|---------------------|-------------|
+| `POST /v0/round-party-totals` | No direct replacement yet (still functional) |
+| `POST /v0/round-totals` | No direct replacement yet (still functional) |
+| `POST /v0/activities` | Use `/v2/updates` for raw transaction data |
+| `GET /v0/total-amulet-balance` | Use `/registry/metadata/v1/instruments/Amulet` token standard metadata API |
+| `GET /v0/wallet-balance` | Use `/v0/holdings/summary` with `/v0/state/acs/snapshot-timestamp` |
+| `GET /v0/amulet-config-for-round` | Use `/v0/amulet-rules` for current configuration |
+| `GET /v0/top-providers-by-app-rewards` | No direct replacement yet |
+| `GET /v0/top-validators-by-validator-rewards` | No direct replacement yet |
+| `GET /v0/top-validators-by-purchased-traffic` | No direct replacement yet |
+| `GET /v0/aggregated-rounds` | No direct replacement yet |
+| `GET /v0/round-of-latest-data` | No direct replacement yet |
+| `GET /v0/rewards-collected` | No direct replacement yet |
+| `POST /v0/transactions` | Use `/v2/updates` (deprecated with known bugs) |
+| `POST /v0/updates` | Use `/v2/updates` |
+| `GET /v0/updates/{update_id}` | Use `/v2/updates/{update_id}` |
+| `POST /v1/updates` | Use `/v2/updates` |
+| `GET /v1/updates/{update_id}` | Use `/v2/updates/{update_id}` |
 
 ---
 
 ## Summary
 
-**Total Endpoints Implemented:** 46 production endpoints
+**Total Endpoints Implemented:** 50 production endpoints
 
 **API Version Support:**
-- v0 endpoints: 42 endpoints
+- v0 endpoints: 42 endpoints (some marked deprecated in MainNet)
 - v1 endpoints: 0 (deprecated, not implemented)
 - v2 endpoints: 2 endpoints (updates)
+- Common endpoints: 4 (readyz, livez, status, version)
 
 **Coverage:**
-- Core operations: ✅ 
-- Administrative operations: ✅ 
-- Backfilling operations: ✅ 
-- Internal operations: ✅ 
-- Deprecated endpoints: ❌ Correctly not implemented
+- Core operations: ✅
+- Administrative operations: ✅
+- Backfilling operations: ✅
+- Internal operations: ✅
+- Health/Status operations: ✅
+- Deprecated endpoints: Documented with migration guidance
 
-This implementation provides 100% coverage of all non-deprecated endpoints from the official Scan Open API specification.
+This implementation provides coverage of all non-deprecated endpoints from the official MainNet Scan Open API specification, plus the `get_round_party_totals()` deprecated endpoint which is still functional and used by the rewards analysis system.

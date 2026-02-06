@@ -809,6 +809,10 @@ class SpliceScanClient:
         """
         Retrieve per-party Amulet statistics for closed rounds.
 
+        .. deprecated::
+            This endpoint is deprecated in the MainNet API. It remains functional
+            but may be removed in a future release.
+
         This endpoint provides app_rewards, validator_rewards, and other metrics
         per party per round, which is useful for analyzing reward distribution.
 
@@ -986,20 +990,74 @@ class SpliceScanClient:
 
     def health_check(self) -> bool:
         """
-        Check if the API is accessible by calling a minimal endpoint.
-
-        Uses GET /v0/dso as a health check since there's no dedicated health endpoint
-        documented in the Splice Scan API specification.
+        Check if the API is accessible using the /readyz endpoint.
 
         Returns:
             True if API is healthy, False otherwise
         """
         try:
-            self._make_request('GET', '/v0/dso')
+            self._make_request('GET', '/readyz')
             return True
-        except Exception as e:
-            print(f"Health check failed: {e}")
+        except Exception:
+            # Fall back to /v0/dso if /readyz is not available
+            try:
+                self._make_request('GET', '/v0/dso')
+                return True
+            except Exception as e:
+                print(f"Health check failed: {e}")
+                return False
+
+    def get_readiness(self) -> bool:
+        """
+        Check if the service is ready to accept requests.
+
+        Endpoint: GET /readyz
+
+        Returns:
+            True if service is ready, False otherwise
+        """
+        try:
+            self._make_request('GET', '/readyz')
+            return True
+        except Exception:
             return False
+
+    def get_liveness(self) -> bool:
+        """
+        Check if the service is alive.
+
+        Endpoint: GET /livez
+
+        Returns:
+            True if service is alive, False otherwise
+        """
+        try:
+            self._make_request('GET', '/livez')
+            return True
+        except Exception:
+            return False
+
+    def get_status(self) -> Dict[str, Any]:
+        """
+        Get detailed service status including uptime and configuration.
+
+        Endpoint: GET /status
+
+        Returns:
+            Dictionary containing success object with id, uptime, ports, extra, and active fields
+        """
+        return self._make_request('GET', '/status')
+
+    def get_version(self) -> Dict[str, Any]:
+        """
+        Get the service version and commit timestamp.
+
+        Endpoint: GET /version
+
+        Returns:
+            Dictionary containing version string and commit_ts timestamp
+        """
+        return self._make_request('GET', '/version')
 
     # ========== Utility Methods ==========
 

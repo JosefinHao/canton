@@ -179,9 +179,11 @@ State Updated
 | Transaction Type | Primary API Endpoints |
 |-----------------|----------------------|
 | Private Transactions | `/v2/updates`, `/v0/events` |
-| Canton Coin Transfers | `/v0/activities`, `/v0/holdings/summary`, `/v2/updates` |
-| Traffic Fee Purchases | `/v0/round-party-totals`, `/v0/top-validators-by-purchased-traffic` |
-| Featured App Mint | `/v0/round-party-totals`, `/v0/top-providers-by-app-rewards`, `/v0/featured-apps` |
+| Canton Coin Transfers | `/v0/holdings/summary`, `/v2/updates` |
+| Traffic Fee Purchases | `/v0/round-party-totals` *(deprecated)*, `/v2/updates` |
+| Featured App Mint | `/v0/round-party-totals` *(deprecated)*, `/v0/featured-apps` |
+
+> **Note (MainNet)**: Several endpoints referenced above are deprecated in the MainNet API, including `/v0/activities`, `/v0/round-party-totals`, `/v0/top-providers-by-app-rewards`, and `/v0/top-validators-by-purchased-traffic`. They remain functional but may be removed in future releases. Use `/v2/updates` for raw transaction data. See [API Reference](./API_REFERENCE.md) for the full deprecation table.
 
 ---
 
