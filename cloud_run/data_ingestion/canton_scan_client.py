@@ -2,29 +2,50 @@
 Canton Scan API Client (Cloud Function Version)
 
 Minimal client for fetching updates from the Canton Scan API.
+Supports multiple SV node URLs with automatic failover.
 """
 
 import logging
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, List
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
+# MainNet SV Node URLs - try these in order if primary fails
+MAINNET_SV_URLS = [
+    "https://scan.sv-1.global.canton.network.sync.global/api/scan/",
+    "https://scan.sv-1.global.canton.network.digitalasset.com/api/scan/",
+    "https://scan.sv-2.global.canton.network.digitalasset.com/api/scan/",
+    "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/",
+    "https://scan.sv-2.global.canton.network.cumberland.io/api/scan/",
+    "https://scan.sv-1.global.canton.network.tradeweb.com/api/scan/",
+    "https://scan.sv-1.global.canton.network.mpch.io/api/scan/",
+    "https://scan.sv-1.global.canton.network.fivenorth.io/api/scan/",
+    "https://scan.sv-1.global.canton.network.proofgroup.xyz/api/scan/",
+    "https://scan.sv-1.global.canton.network.c7.digital/api/scan/",
+    "https://scan.sv-1.global.canton.network.lcv.mpch.io/api/scan/",
+    "https://scan.sv-1.global.canton.network.orb1lp.mpch.io/api/scan/",
+    "https://scan.sv.global.canton.network.sv-nodeops.com/api/scan/",
+]
+
 
 class SpliceScanClient:
-    """Client for interacting with Canton Scan API."""
+    """Client for interacting with Canton Scan API with failover support."""
 
     def __init__(
         self,
         base_url: str,
         timeout: int = 30,
-        max_retries: int = 3
+        max_retries: int = 3,
+        use_failover: bool = True
     ):
         """Initialize the Scan API client."""
         self.base_url = base_url.rstrip('/')
         self.timeout = timeout
+        self.use_failover = use_failover
+        self._working_url: Optional[str] = None
 
         self.session = requests.Session()
         retry_strategy = Retry(
@@ -38,6 +59,39 @@ class SpliceScanClient:
         self.session.mount("https://", adapter)
         self.session.headers.update({'Accept': 'application/json'})
 
+    def _make_single_request(
+        self,
+        base_url: str,
+        method: str,
+        endpoint: str,
+        params: Optional[Dict] = None,
+        json_data: Optional[Dict] = None
+    ) -> Dict[str, Any]:
+        """Make a single request to a specific base URL."""
+        url = f"{base_url.rstrip('/')}/{endpoint.lstrip('/')}"
+
+        request_headers = None
+        if json_data is not None:
+            request_headers = {'Content-Type': 'application/json'}
+
+        response = self.session.request(
+            method=method,
+            url=url,
+            params=params,
+            json=json_data,
+            headers=request_headers,
+            timeout=self.timeout
+        )
+        response.raise_for_status()
+
+        if response.status_code == 204 or not response.content:
+            return {}
+
+        result = response.json()
+        if not isinstance(result, dict):
+            return {}
+        return result
+
     def _make_request(
         self,
         method: str,
@@ -45,38 +99,51 @@ class SpliceScanClient:
         params: Optional[Dict] = None,
         json_data: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """Make a request to the API."""
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        """Make a request to the API with failover support."""
+        # If we have a working URL from previous requests, try it first
+        if self._working_url:
+            try:
+                logger.info(f"Trying cached working URL: {self._working_url}")
+                result = self._make_single_request(self._working_url, method, endpoint, params, json_data)
+                return result
+            except Exception as e:
+                logger.warning(f"Cached URL failed: {e}, will try other URLs")
+                self._working_url = None
 
-        try:
-            request_headers = None
-            if json_data is not None:
-                request_headers = {'Content-Type': 'application/json'}
+        # Try the primary base_url first
+        urls_to_try = [self.base_url]
 
-            response = self.session.request(
-                method=method,
-                url=url,
-                params=params,
-                json=json_data,
-                headers=request_headers,
-                timeout=self.timeout
-            )
-            response.raise_for_status()
+        # Add failover URLs if enabled
+        if self.use_failover:
+            for url in MAINNET_SV_URLS:
+                if url.rstrip('/') != self.base_url.rstrip('/') and url.rstrip('/') not in [u.rstrip('/') for u in urls_to_try]:
+                    urls_to_try.append(url.rstrip('/'))
 
-            if response.status_code == 204 or not response.content:
-                return {}
+        last_error = None
+        for base_url in urls_to_try:
+            try:
+                logger.info(f"Trying SV node: {base_url}")
+                result = self._make_single_request(base_url, method, endpoint, params, json_data)
+                # Success! Cache this URL for future requests
+                self._working_url = base_url
+                logger.info(f"Successfully connected to: {base_url}")
+                return result
+            except requests.exceptions.Timeout as e:
+                logger.warning(f"Timeout connecting to {base_url}: {e}")
+                last_error = e
+            except requests.exceptions.ConnectionError as e:
+                logger.warning(f"Connection error to {base_url}: {e}")
+                last_error = e
+            except requests.exceptions.HTTPError as e:
+                logger.warning(f"HTTP error from {base_url}: {e}")
+                last_error = e
+            except Exception as e:
+                logger.warning(f"Error from {base_url}: {e}")
+                last_error = e
 
-            result = response.json()
-            if not isinstance(result, dict):
-                return {}
-            return result
-
-        except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP Error: {e}")
-            raise
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request Error: {e}")
-            raise
+        # All URLs failed
+        logger.error(f"All SV node URLs failed. Last error: {last_error}")
+        raise last_error or Exception("All SV node URLs failed")
 
     def get_updates(
         self,
