@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PipelineConfig:
     """Configuration for the data ingestion pipeline."""
-    scan_api_base_url: str = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
+    scan_api_base_url: str = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
     scan_api_timeout: int = 60
     scan_api_max_retries: int = 3
     bq_project_id: str = "governence-483517"

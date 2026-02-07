@@ -13,21 +13,25 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# MainNet SV Node URLs - try these in order if primary fails
+# MainNet SV Node URLs - ordered by response time (fastest first)
+# All 13 nodes included for maximum failover resilience
 MAINNET_SV_URLS = [
-    "https://scan.sv-1.global.canton.network.sync.global/api/scan/",
-    "https://scan.sv-1.global.canton.network.digitalasset.com/api/scan/",
-    "https://scan.sv-2.global.canton.network.digitalasset.com/api/scan/",
+    # Verified working (200) - ordered by response time
     "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/",
     "https://scan.sv-2.global.canton.network.cumberland.io/api/scan/",
-    "https://scan.sv-1.global.canton.network.tradeweb.com/api/scan/",
-    "https://scan.sv-1.global.canton.network.mpch.io/api/scan/",
-    "https://scan.sv-1.global.canton.network.fivenorth.io/api/scan/",
     "https://scan.sv-1.global.canton.network.proofgroup.xyz/api/scan/",
-    "https://scan.sv-1.global.canton.network.c7.digital/api/scan/",
+    "https://scan.sv-1.global.canton.network.tradeweb.com/api/scan/",
+    "https://scan.sv-1.global.canton.network.digitalasset.com/api/scan/",
+    "https://scan.sv-2.global.canton.network.digitalasset.com/api/scan/",
+    "https://scan.sv.global.canton.network.sv-nodeops.com/api/scan/",
+    "https://scan.sv-1.global.canton.network.fivenorth.io/api/scan/",
+    # Currently returning 403 - may become accessible after IP whitelisting
+    "https://scan.sv-1.global.canton.network.mpch.io/api/scan/",
     "https://scan.sv-1.global.canton.network.lcv.mpch.io/api/scan/",
     "https://scan.sv-1.global.canton.network.orb1lp.mpch.io/api/scan/",
-    "https://scan.sv.global.canton.network.sv-nodeops.com/api/scan/",
+    # Currently timing out - may become accessible
+    "https://scan.sv-1.global.canton.network.sync.global/api/scan/",
+    "https://scan.sv-1.global.canton.network.c7.digital/api/scan/",
 ]
 
 

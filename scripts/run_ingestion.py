@@ -54,7 +54,7 @@ def get_config(args) -> PipelineConfig:
     return PipelineConfig(
         scan_api_base_url=os.environ.get(
             'SCAN_API_BASE_URL',
-            'https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/'
+            'https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
         ),
         scan_api_timeout=int(os.environ.get('SCAN_API_TIMEOUT', '60')),
         scan_api_max_retries=int(os.environ.get('SCAN_API_MAX_RETRIES', '3')),

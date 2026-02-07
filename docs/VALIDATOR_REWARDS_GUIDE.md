@@ -242,7 +242,7 @@ from src.validator_rewards_analyzer import ValidatorRewardsAnalyzer
 
 # Initialize client
 client = SpliceScanClient(
-    base_url='https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/'
+    base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
 )
 
 # Create analyzer
