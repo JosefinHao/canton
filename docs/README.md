@@ -8,7 +8,7 @@ A Python client for querying and analyzing on-chain data from the Splice Network
 from src.canton_scan_client import SpliceScanClient
 
 # Initialize and start querying - that's it!
-client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
+client = SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.cumberland.io/api/scan/")
 updates = client.get_updates(page_size=10)
 print(f"Retrieved {len(updates['updates'])} updates!")
 ```
@@ -71,7 +71,7 @@ pip install requests urllib3
 The Splice Network Scan API is accessible at:
 
 ```
-https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/
+https://scan.sv-1.global.canton.network.cumberland.io/api/scan/
 ```
 
 ### Optional Configuration
@@ -80,7 +80,7 @@ You can optionally configure:
 
 ```yaml
 api:
-  base_url: "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
+  base_url: "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
   timeout: 30  # Request timeout in seconds
   max_retries: 3  # Number of retry attempts
 ```
@@ -93,7 +93,7 @@ api:
 from src.canton_scan_client import SpliceScanClient
 
 # Initialize client
-client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
+client = SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.cumberland.io/api/scan/")
 
 # Get DSO information
 dso = client.get_dso()
@@ -121,7 +121,7 @@ client.close()
 from src.canton_scan_client import SpliceScanClient
 
 # Recommended: use context manager for automatic cleanup
-with SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/") as client:
+with SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.cumberland.io/api/scan/") as client:
     # Your queries here
     updates = client.get_updates(page_size=10)
     # Client automatically closes when exiting the context
@@ -135,7 +135,7 @@ For proper processing of updates with event tree traversal and state accumulatio
 from src.canton_scan_client import SpliceScanClient
 from src.update_tree_processor import UpdateTreeProcessor
 
-client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
+client = SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.cumberland.io/api/scan/")
 
 # Fetch updates
 updates_response = client.get_updates(page_size=100)
@@ -240,7 +240,7 @@ python basic_queries.py
 You can optionally edit the `BASE_URL` if you're using a different Splice Network instance:
 
 ```python
-BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
+BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
 ```
 
 ### Data Analysis Example
@@ -410,7 +410,7 @@ from src.splice_analytics import (
 )
 
 # Initialize client
-client = SpliceScanClient(base_url="https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/")
+client = SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.cumberland.io/api/scan/")
 
 # Use specialized analyzers
 tx_analyzer = TransactionAnalyzer(client)
@@ -767,7 +767,7 @@ except requests.exceptions.RequestException as e:
 
 ### Connection Errors
 
-- Verify the base URL is correct: `https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/`
+- Verify the base URL is correct: `https://scan.sv-1.global.canton.network.cumberland.io/api/scan/`
 - Check network connectivity
 - Verify firewall rules allow outbound HTTPS connections
 - Ensure DNS resolution is working
