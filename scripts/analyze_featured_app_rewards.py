@@ -23,7 +23,7 @@ Usage:
 
 Options:
     --url URL                Base URL for the Splice Scan API
-                            (default: https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/)
+                            (default: https://scan.sv-1.global.canton.network.cumberland.io/api/scan/)
     --start-round N         Starting round number (default: 1)
     --end-round N           Ending round number (default: auto-detect)
     --max-rounds N          Maximum number of rounds to fetch (default: 500)
@@ -78,7 +78,7 @@ def main():
 
     parser.add_argument(
         '--url',
-        default='https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/',
+        default='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/',
         help='Base URL for Splice Scan API'
     )
     parser.add_argument(

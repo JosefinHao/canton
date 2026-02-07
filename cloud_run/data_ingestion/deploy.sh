@@ -17,7 +17,7 @@ MIN_INSTANCES="${MIN_INSTANCES:-0}"
 MAX_INSTANCES="${MAX_INSTANCES:-1}"
 
 # Environment variables
-SCAN_API_BASE_URL="${SCAN_API_BASE_URL:-https://scan.sv-1.global.canton.network.sync.global/api/scan/}"
+SCAN_API_BASE_URL="${SCAN_API_BASE_URL:-https://scan.sv-1.global.canton.network.cumberland.io/api/scan/}"
 BQ_PROJECT_ID="${BQ_PROJECT_ID:-governence-483517}"
 BQ_RAW_DATASET="${BQ_RAW_DATASET:-raw}"
 BQ_TRANSFORMED_DATASET="${BQ_TRANSFORMED_DATASET:-transformed}"

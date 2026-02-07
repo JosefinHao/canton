@@ -13,21 +13,19 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# MainNet SV Node URLs - try these in order if primary fails
+# MainNet SV Node URLs - ordered by response time (fastest first)
+# Verified accessible: cumberland.io, proofgroup.xyz, tradeweb.com,
+#   digitalasset.com, sv-nodeops.com, fivenorth.io
+# Not accessible (403/timeout): sync.global, c7.digital, mpch.io variants
 MAINNET_SV_URLS = [
-    "https://scan.sv-1.global.canton.network.sync.global/api/scan/",
-    "https://scan.sv-1.global.canton.network.digitalasset.com/api/scan/",
-    "https://scan.sv-2.global.canton.network.digitalasset.com/api/scan/",
     "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/",
     "https://scan.sv-2.global.canton.network.cumberland.io/api/scan/",
-    "https://scan.sv-1.global.canton.network.tradeweb.com/api/scan/",
-    "https://scan.sv-1.global.canton.network.mpch.io/api/scan/",
-    "https://scan.sv-1.global.canton.network.fivenorth.io/api/scan/",
     "https://scan.sv-1.global.canton.network.proofgroup.xyz/api/scan/",
-    "https://scan.sv-1.global.canton.network.c7.digital/api/scan/",
-    "https://scan.sv-1.global.canton.network.lcv.mpch.io/api/scan/",
-    "https://scan.sv-1.global.canton.network.orb1lp.mpch.io/api/scan/",
+    "https://scan.sv-1.global.canton.network.tradeweb.com/api/scan/",
+    "https://scan.sv-1.global.canton.network.digitalasset.com/api/scan/",
+    "https://scan.sv-2.global.canton.network.digitalasset.com/api/scan/",
     "https://scan.sv.global.canton.network.sv-nodeops.com/api/scan/",
+    "https://scan.sv-1.global.canton.network.fivenorth.io/api/scan/",
 ]
 
 

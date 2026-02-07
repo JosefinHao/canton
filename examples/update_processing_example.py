@@ -22,7 +22,7 @@ from src.update_tree_processor import UpdateTreeProcessor
 def main():
     """Run the update processing example."""
 
-    BASE_URL = "https://scan.sv-1.dev.global.canton.network.sync.global/api/scan/"
+    BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
 
     print("="*80)
     print("Update Tree Processing Example")
