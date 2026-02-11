@@ -121,6 +121,58 @@ def main():
     print("  python splice_analytics_debug.py")
     print()
 
+    # Test all 13 SV node URLs
+    print()
+    print("=" * 80)
+    print("SV NODE CONNECTIVITY CHECK")
+    print("=" * 80)
+    print()
+
+    from cloud_run.data_ingestion.canton_scan_client import MAINNET_SV_URLS
+    import time
+
+    sv_results = []
+    for i, url in enumerate(MAINNET_SV_URLS, 1):
+        # Extract short name from URL
+        host = url.split("canton.network.")[1].split("/")[0]
+        print(f"[{i:2d}/13] {host}...", end=" ", flush=True)
+        start = time.time()
+        try:
+            sv_client = SpliceScanClient(base_url=url)
+            result = sv_client.get_dso()
+            elapsed = time.time() - start
+            if isinstance(result, dict) and 'error' not in result:
+                status = f"✓ OK ({elapsed:.2f}s)"
+                sv_results.append((host, True, elapsed))
+            else:
+                status = f"✗ Error response ({elapsed:.2f}s)"
+                sv_results.append((host, False, elapsed))
+            sv_client.close()
+        except Exception as e:
+            elapsed = time.time() - start
+            error_msg = str(e)
+            if len(error_msg) > 60:
+                error_msg = error_msg[:57] + "..."
+            status = f"✗ {type(e).__name__} ({elapsed:.2f}s)"
+            sv_results.append((host, False, elapsed))
+        print("\r" + " " * 80, end="\r")
+        print(f"[{i:2d}/13] {host:30s} {status}")
+
+    print()
+    print("=" * 80)
+    print("SV NODE SUMMARY")
+    print("=" * 80)
+    reachable = sum(1 for _, ok, _ in sv_results if ok)
+    print(f"Reachable: {reachable}/13")
+    if reachable > 0:
+        fastest = min((t, h) for h, ok, t in sv_results if ok)
+        print(f"Fastest:   {fastest[1]} ({fastest[0]:.2f}s)")
+    print()
+    for host, ok, elapsed in sv_results:
+        marker = "✓" if ok else "✗"
+        print(f"  {marker} {host:30s} {elapsed:.2f}s")
+    print()
+
 
 if __name__ == "__main__":
     main()
