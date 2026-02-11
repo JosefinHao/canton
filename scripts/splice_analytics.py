@@ -1318,7 +1318,7 @@ def main():
     """Demonstrate the analytics capabilities."""
 
     # Configuration
-    BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
+    BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
 
     print("Initializing Splice Analytics...")
     client = SpliceScanClient(base_url=BASE_URL)

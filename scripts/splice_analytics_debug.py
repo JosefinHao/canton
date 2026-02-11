@@ -6,7 +6,7 @@ Debug version of splice analytics to diagnose data retrieval issues.
 import sys
 from src.canton_scan_client import SpliceScanClient
 
-BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
+BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
 
 def test_validators(client):
     """Test validator data retrieval with diagnostics."""

@@ -45,7 +45,7 @@ from src.canton_scan_client import SpliceScanClient
 from src.update_tree_processor import UpdateTreeProcessor
 
 # Initialize client
-client = SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.cumberland.io/api/scan/")
+client = SpliceScanClient(base_url="https://scan.sv-1.global.canton.network.sync.global/api/scan/")
 
 # Fetch updates
 updates = client.get_updates(page_size=100)

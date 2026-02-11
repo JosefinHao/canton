@@ -163,7 +163,7 @@ python scripts/analyze_validator_rewards.py [OPTIONS]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--url URL` | `https://scan.sv-1.global.canton.network.cumberland.io/api/scan/` | Splice Scan API base URL |
+| `--url URL` | `https://scan.sv-1.global.canton.network.sync.global/api/scan/` | Splice Scan API base URL |
 | `--max-pages N` | `100` | Maximum pages to fetch |
 | `--page-size N` | `100` | Updates per page |
 | `--output-dir DIR` | `validator_rewards_report` | Output directory |
@@ -242,7 +242,7 @@ from src.validator_rewards_analyzer import ValidatorRewardsAnalyzer
 
 # Initialize client
 client = SpliceScanClient(
-    base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+    base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
 )
 
 # Create analyzer

@@ -181,7 +181,7 @@ Configure these environment variables for the Cloud Function:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SCAN_API_BASE_URL` | `https://scan.sv-1.global.canton.network.cumberland.io/api/scan/` | Scan API base URL |
+| `SCAN_API_BASE_URL` | `https://scan.sv-1.global.canton.network.sync.global/api/scan/` | Scan API base URL |
 | `BQ_PROJECT_ID` | `governence-483517` | BigQuery project ID |
 | `BQ_RAW_DATASET` | `raw` | Raw events dataset |
 | `BQ_TRANSFORMED_DATASET` | `transformed` | Transformed events dataset |

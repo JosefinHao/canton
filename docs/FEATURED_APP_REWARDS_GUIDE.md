@@ -197,7 +197,7 @@ python scripts/analyze_featured_app_rewards.py [OPTIONS]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--url URL` | `https://scan.sv-1.global.canton.network.cumberland.io/api/scan/` | Splice Scan API base URL |
+| `--url URL` | `https://scan.sv-1.global.canton.network.sync.global/api/scan/` | Splice Scan API base URL |
 | `--start-round N` | `1` | Starting round number |
 | `--end-round N` | Auto | Ending round number |
 | `--max-rounds N` | `500` | Maximum rounds to fetch |
@@ -277,7 +277,7 @@ from src.featured_app_rewards_analyzer import FeaturedAppRewardsAnalyzer
 
 # Initialize client
 client = SpliceScanClient(
-    base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+    base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
 )
 
 # Create analyzer

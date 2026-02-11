@@ -10,7 +10,7 @@ Usage:
 
 Options:
     --url URL                Base URL for the Splice Scan API
-                            (default: https://scan.sv-1.global.canton.network.cumberland.io/api/scan/)
+                            (default: https://scan.sv-1.global.canton.network.sync.global/api/scan/)
     --max-pages N           Maximum number of pages to fetch (default: 100)
     --page-size N           Updates per page (default: 100)
     --output-dir DIR        Output directory for reports (default: validator_rewards_report)
@@ -61,7 +61,7 @@ def main():
 
     parser.add_argument(
         '--url',
-        default='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/',
+        default='https://scan.sv-1.global.canton.network.sync.global/api/scan/',
         help='Base URL for Splice Scan API'
     )
     parser.add_argument(
