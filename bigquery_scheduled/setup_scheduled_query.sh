@@ -1,13 +1,13 @@
 #!/bin/bash
 # Setup BigQuery Scheduled Query for transformation
 #
-# This creates a scheduled query that runs every 15 minutes to transform
+# This creates a scheduled query that runs daily to transform
 # new raw events into the parsed format.
 
 PROJECT_ID="${GCP_PROJECT_ID:-governence-483517}"
 LOCATION="${LOCATION:-us}"
 DISPLAY_NAME="${DISPLAY_NAME:-Canton Events Transformation}"
-SCHEDULE="${SCHEDULE:-every 15 minutes}"
+SCHEDULE="${SCHEDULE:-every 24 hours}"
 
 echo "======================================"
 echo "Setting up BigQuery Scheduled Query"

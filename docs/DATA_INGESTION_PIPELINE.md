@@ -138,7 +138,7 @@ gcloud compute addresses describe canton-nat-ip \
 | Setting | Value |
 |---------|-------|
 | Name | `transform_raw_events` |
-| Schedule | Every 15 minutes |
+| Schedule | Daily |
 | Location | US |
 | Write Disposition | WRITE_APPEND (incremental) |
 

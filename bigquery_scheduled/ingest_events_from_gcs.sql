@@ -10,10 +10,10 @@
 --   at gs://canton-bucket/raw/updates/events/*
 --
 -- How it works:
--- 1. Scans only the last 3 days from the GCS external table (partition pruning)
+-- 1. Scans yesterday and today from the GCS external table (partition pruning)
 -- 2. Uses NOT EXISTS to skip rows already in raw.events (dedup on event_id + event_date)
 -- 3. Inserts only truly new rows into the native partitioned table
--- The 3-day window provides a safety buffer for late-arriving data while keeping costs low.
+-- The 1-day lookback window keeps daily costs minimal (~80 GB for both stages).
 
 INSERT INTO `governence-483517.raw.events` (
     event_id, update_id, event_type, event_type_original,
@@ -38,7 +38,7 @@ SELECT
     trace_context, year, month, day,
     DATE(year, month, day) AS event_date
 FROM `governence-483517.raw.events_updates_external`
-WHERE DATE(year, month, day) >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)
+WHERE DATE(year, month, day) >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   AND NOT EXISTS (
     SELECT 1
     FROM `governence-483517.raw.events` e
