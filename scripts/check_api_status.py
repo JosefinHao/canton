@@ -6,7 +6,9 @@ Run this to see which endpoints are accessible and working.
 
 from src.canton_scan_client import SpliceScanClient
 
-BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
+from cloud_run.data_ingestion.canton_scan_client import MAINNET_PRIMARY_URL, MAINNET_SV_URLS
+
+BASE_URL = MAINNET_PRIMARY_URL
 FALLBACK_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
 
 def check_endpoint(name, func, description):
@@ -144,8 +146,6 @@ def main():
     print("SV NODE CONNECTIVITY CHECK")
     print("=" * 80)
     print()
-
-    from cloud_run.data_ingestion.canton_scan_client import MAINNET_SV_URLS
 
     sv_results = []
     for i, url in enumerate(MAINNET_SV_URLS, 1):

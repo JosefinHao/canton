@@ -18,7 +18,7 @@ from src.canton_scan_client import SpliceScanClient
 def main():
     """Run basic query examples."""
 
-    BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
+    BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
 
     print("Initializing Splice Scan API client...")
     client = SpliceScanClient(base_url=BASE_URL)

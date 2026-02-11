@@ -21,7 +21,7 @@ def example_basic_analysis():
 
     # Initialize client
     client = SpliceScanClient(
-        base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+        base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
     )
 
     # Create analyzer
@@ -52,7 +52,7 @@ def example_specific_app_analysis():
     print("-" * 80)
 
     client = SpliceScanClient(
-        base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+        base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
     )
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
@@ -90,7 +90,7 @@ def example_generate_visualizations():
     print("-" * 80)
 
     client = SpliceScanClient(
-        base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+        base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
     )
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
@@ -140,7 +140,7 @@ def example_export_data():
     print("-" * 80)
 
     client = SpliceScanClient(
-        base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+        base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
     )
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
@@ -162,7 +162,7 @@ def example_custom_analysis():
     print("-" * 80)
 
     client = SpliceScanClient(
-        base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+        base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
     )
     analyzer = FeaturedAppRewardsAnalyzer(client)
 
@@ -207,7 +207,7 @@ def example_timeline_analysis():
     print("-" * 80)
 
     client = SpliceScanClient(
-        base_url='https://scan.sv-1.global.canton.network.cumberland.io/api/scan/'
+        base_url='https://scan.sv-1.global.canton.network.sync.global/api/scan/'
     )
     analyzer = FeaturedAppRewardsAnalyzer(client)
 

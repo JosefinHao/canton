@@ -13,8 +13,10 @@ from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-# MainNet SV Node URLs - ordered by response time (fastest first)
-# All 13 nodes included for maximum failover resilience
+# Primary MainNet URL
+MAINNET_PRIMARY_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
+
+# All 13 MainNet SV Node URLs - ordered by response time (fastest first)
 MAINNET_SV_URLS = [
     # Verified working (200) - ordered by response time
     "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/",
@@ -29,7 +31,7 @@ MAINNET_SV_URLS = [
     "https://scan.sv-1.global.canton.network.mpch.io/api/scan/",
     "https://scan.sv-1.global.canton.network.lcv.mpch.io/api/scan/",
     "https://scan.sv-1.global.canton.network.orb1lp.mpch.io/api/scan/",
-    # Currently timing out - may become accessible
+    # Currently timing out
     "https://scan.sv-1.global.canton.network.sync.global/api/scan/",
     "https://scan.sv-1.global.canton.network.c7.digital/api/scan/",
 ]
@@ -122,9 +124,9 @@ class SpliceScanClient:
                 logger.warning(f"Cached URL failed: {e}, will try other URLs")
                 self._working_url = None
 
-        # Use the full SV node list for failover
+        # Try primary URL first, then all 13 SV nodes for failover
         if self.use_failover:
-            urls_to_try = [url.rstrip('/') for url in MAINNET_SV_URLS]
+            urls_to_try = [MAINNET_PRIMARY_URL.rstrip('/')] + [url.rstrip('/') for url in MAINNET_SV_URLS]
         else:
             urls_to_try = [self.base_url]
 

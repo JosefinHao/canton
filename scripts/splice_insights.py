@@ -898,7 +898,7 @@ class InsightVisualizer:
 def main():
     """Demonstrate insights and visualizations."""
 
-    BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
+    BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
 
     print("=" * 80)
     print("SPLICE NETWORK - DATA ANALYTICS INSIGHTS")
