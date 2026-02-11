@@ -2,8 +2,9 @@
 -- Schedule: Daily (runs after ingest_updates_from_gcs.sql)
 --
 -- This query incrementally transforms new rows from raw.events to transformed.events_parsed.
--- It only processes days that don't exist in the parsed table yet, using partition pruning
--- to minimize data scanned.
+-- It scans only the last 3 days from raw.events (partition pruning on a compile-time constant)
+-- and uses NOT EXISTS to skip rows already in events_parsed (dedup on event_id + event_date).
+-- The 3-day window provides a safety buffer for late-arriving data while keeping costs low.
 --
 -- Schema notes:
 -- - Raw table uses 'recorded_at' (STRING) for timestamp, 'synchronizer_id' for domain
@@ -89,7 +90,10 @@ SELECT
     r.day,
     r.event_date
 FROM `governence-483517.raw.events` r
-WHERE r.event_date > (
-    SELECT COALESCE(MAX(event_date), DATE('1970-01-01'))
-    FROM `governence-483517.transformed.events_parsed`
-);
+WHERE r.event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM `governence-483517.transformed.events_parsed` p
+    WHERE p.event_id = r.event_id
+      AND p.event_date = r.event_date
+  );
