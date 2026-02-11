@@ -6,7 +6,7 @@ Run this to see which endpoints are accessible and working.
 
 from src.canton_scan_client import SpliceScanClient
 
-BASE_URL = "https://scan.global.canton.network.sync.global/api/scan/"
+BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
 FALLBACK_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
 
 def check_endpoint(name, func, description):
