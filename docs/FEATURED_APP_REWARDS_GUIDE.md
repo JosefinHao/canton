@@ -197,7 +197,7 @@ python scripts/analyze_featured_app_rewards.py [OPTIONS]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--url URL` | `https://scan.sv-1.dev.global...` | Splice Scan API base URL |
+| `--url URL` | `https://scan.sv-1.global.canton.network.cumberland.io/api/scan/` | Splice Scan API base URL |
 | `--start-round N` | `1` | Starting round number |
 | `--end-round N` | Auto | Ending round number |
 | `--max-rounds N` | `500` | Maximum rounds to fetch |
@@ -699,7 +699,7 @@ See [ROUND_PARTY_TOTALS_MIGRATION.md](ROUND_PARTY_TOTALS_MIGRATION.md) for detai
 
 ## References
 
-- [Canton Scan API Documentation](https://docs.dev.sync.global/app_dev/scan_api/)
+- [Canton Scan API Documentation](https://docs.canton.network/app_dev/scan_api/)
 - [Update Tree Processing Guide](UPDATE_TREE_PROCESSING.md)
 - [Splice Analytics Guide](README.md)
 - [Canton Ledger Documentation](https://docs.daml.com/)

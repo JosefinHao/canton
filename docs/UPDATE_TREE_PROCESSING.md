@@ -388,8 +388,8 @@ Main class for processing update trees.
 ## References
 
 - [Canton / Daml 3.3 Release Notes](https://blog.digitalasset.com/developers/release-notes/canton-daml-3.3-preview)
-- [Scan Bulk Data API Documentation](https://docs.dev.sync.global/app_dev/scan_api/scan_bulk_data_api.html)
-- [Scan Open API Reference](https://docs.dev.sync.global/app_dev/scan_api/scan_openapi.html)
+- [Scan Bulk Data API Documentation](https://docs.canton.network/app_dev/scan_api/scan_bulk_data_api.html)
+- [Scan Open API Reference](https://docs.canton.network/app_dev/scan_api/scan_openapi.html)
 - [TransactionTree Documentation](https://docs.daml.com/app-dev/services.html)
 
 ## Troubleshooting

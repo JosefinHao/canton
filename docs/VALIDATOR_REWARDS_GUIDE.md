@@ -163,7 +163,7 @@ python scripts/analyze_validator_rewards.py [OPTIONS]
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--url URL` | `https://scan.sv-1.dev.global...` | Splice Scan API base URL |
+| `--url URL` | `https://scan.sv-1.global.canton.network.cumberland.io/api/scan/` | Splice Scan API base URL |
 | `--max-pages N` | `100` | Maximum pages to fetch |
 | `--page-size N` | `100` | Updates per page |
 | `--output-dir DIR` | `validator_rewards_report` | Output directory |
@@ -667,7 +667,7 @@ When extending the analysis system:
 
 ## References
 
-- [Canton Scan API Documentation](https://docs.dev.sync.global/app_dev/scan_api/)
+- [Canton Scan API Documentation](https://docs.canton.network/app_dev/scan_api/)
 - [Update Tree Processing Guide](UPDATE_TREE_PROCESSING.md)
 - [Splice Analytics Guide](README.md)
 - [Canton Ledger Documentation](https://docs.daml.com/)
