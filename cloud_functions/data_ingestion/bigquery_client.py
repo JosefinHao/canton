@@ -117,11 +117,12 @@ class BigQueryClient:
             logger.info(f"Last processed (from state): migration_id={migration_id}, recorded_at={recorded_at}")
             return migration_id, recorded_at
 
-        # Fallback: Use MAX() which is faster than ORDER BY + LIMIT
-        logger.info("State not found, using MAX() query (may be slow on first run)")
+        # Fallback: Use MAX() scoped to recent partitions to limit scan cost
+        logger.info("State not found, using MAX() query on recent partitions")
         query = f"""
         SELECT MAX(migration_id) as migration_id
         FROM `{self.raw_table_id}`
+        WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
         """
 
         try:
@@ -131,11 +132,12 @@ class BigQueryClient:
             if results and results[0].migration_id is not None:
                 max_migration_id = results[0].migration_id
 
-                # Get max recorded_at for that migration_id
+                # Get max recorded_at for that migration_id (scoped to recent partitions)
                 query2 = f"""
                 SELECT MAX(recorded_at) as recorded_at
                 FROM `{self.raw_table_id}`
-                WHERE migration_id = {max_migration_id}
+                WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                  AND migration_id = {max_migration_id}
                 """
                 results2 = list(self.client.query(query2).result())
                 recorded_at = results2[0].recorded_at if results2 else None
@@ -174,11 +176,12 @@ class BigQueryClient:
             logger.info(f"Last transformed (from state): migration_id={migration_id}")
             return migration_id, recorded_at
 
-        # Fallback: Use MAX() which is faster than ORDER BY + LIMIT
-        logger.info("Transformed state not found, using MAX() query")
+        # Fallback: Use MAX() scoped to recent partitions to limit scan cost
+        logger.info("Transformed state not found, using MAX() query on recent partitions")
         query = f"""
         SELECT MAX(migration_id) as migration_id
         FROM `{self.parsed_table_id}`
+        WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
         """
 
         try:
@@ -188,11 +191,12 @@ class BigQueryClient:
             if results and results[0].migration_id is not None:
                 max_migration_id = results[0].migration_id
 
-                # Get max recorded_at for that migration_id
+                # Get max recorded_at for that migration_id (scoped to recent partitions)
                 query2 = f"""
                 SELECT MAX(recorded_at) as recorded_at
                 FROM `{self.parsed_table_id}`
-                WHERE migration_id = {max_migration_id}
+                WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                  AND migration_id = {max_migration_id}
                 """
                 results2 = list(self.client.query(query2).result())
                 recorded_at = results2[0].recorded_at if results2 else None
@@ -254,8 +258,9 @@ class BigQueryClient:
         where_clause = ""
         if last_migration_id is not None and last_recorded_at is not None:
             where_clause = f"""
-            WHERE (migration_id > {last_migration_id})
-               OR (migration_id = {last_migration_id} AND recorded_at > '{last_recorded_at}')
+            WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+              AND ((migration_id > {last_migration_id})
+                OR (migration_id = {last_migration_id} AND recorded_at > '{last_recorded_at}'))
             """
 
         transformation_query = f"""
@@ -268,7 +273,7 @@ class BigQueryClient:
             reassignment_counter, source_synchronizer, target_synchronizer,
             unassign_id, submitter,
             payload, contract_key, exercise_result, raw_event, trace_context,
-            year, month, day
+            year, month, day, event_date
         )
         SELECT
             event_id,
@@ -309,7 +314,8 @@ class BigQueryClient:
             -- Date parts
             year,
             month,
-            day
+            day,
+            event_date
         FROM `{self.raw_table_id}`
         {where_clause}
         """

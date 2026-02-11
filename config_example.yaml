@@ -4,8 +4,8 @@
 # API Configuration
 api:
   # Base URL of the Scan API
-  # Default: https://scan.canton.network/api/v1
-  base_url: "https://scan.canton.network/api/v1"
+  # Default: https://scan.sv-1.global.canton.network.cumberland.io/api/scan/
+  base_url: "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
 
   # Request timeout in seconds
   timeout: 30
