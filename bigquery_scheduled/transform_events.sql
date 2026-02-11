@@ -43,7 +43,8 @@ INSERT INTO `governence-483517.transformed.events_parsed` (
     trace_context,
     year,
     month,
-    day
+    day,
+    event_date
 )
 SELECT
     r.event_id,
@@ -84,7 +85,8 @@ SELECT
     -- Date parts
     r.year,
     r.month,
-    r.day
+    r.day,
+    r.event_date
 FROM `governence-483517.raw.events` r
 LEFT JOIN `governence-483517.transformed.events_parsed` p
     ON r.event_id = p.event_id
