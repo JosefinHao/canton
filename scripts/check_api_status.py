@@ -6,7 +6,8 @@ Run this to see which endpoints are accessible and working.
 
 from src.canton_scan_client import SpliceScanClient
 
-BASE_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
+BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
+FALLBACK_URL = "https://scan.sv-1.global.canton.network.cumberland.io/api/scan/"
 
 def check_endpoint(name, func, description):
     """Test a single endpoint and report status."""
@@ -37,10 +38,26 @@ def main():
     print("=" * 80)
     print("SPLICE API STATUS CHECKER")
     print("=" * 80)
-    print(f"Target: {BASE_URL}")
+
+    # Try original MainNet URL first, fall back to fastest SV node
+    import time
+    url = BASE_URL
+    print(f"Trying primary URL: {BASE_URL}...", end=" ", flush=True)
+    try:
+        test_client = SpliceScanClient(base_url=BASE_URL)
+        start = time.time()
+        test_client.get_dso()
+        elapsed = time.time() - start
+        test_client.close()
+        print(f"✓ OK ({elapsed:.2f}s)")
+    except Exception:
+        print(f"✗ Unreachable, falling back to {FALLBACK_URL}")
+        url = FALLBACK_URL
+
+    print(f"Target: {url}")
     print()
 
-    client = SpliceScanClient(base_url=BASE_URL)
+    client = SpliceScanClient(base_url=url)
 
     # Test endpoints
     tests = [
@@ -129,7 +146,6 @@ def main():
     print()
 
     from cloud_run.data_ingestion.canton_scan_client import MAINNET_SV_URLS
-    import time
 
     sv_results = []
     for i, url in enumerate(MAINNET_SV_URLS, 1):
