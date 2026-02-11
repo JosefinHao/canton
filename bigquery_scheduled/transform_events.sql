@@ -1,5 +1,5 @@
 -- BigQuery Scheduled Query: Transform raw events to parsed format
--- Schedule: Daily (runs after ingest_updates_from_gcs.sql)
+-- Schedule: Daily (runs after ingest_events_from_gcs.sql)
 --
 -- This query incrementally transforms new rows from raw.events to transformed.events_parsed.
 -- It scans only the last 3 days from raw.events (partition pruning on a compile-time constant)

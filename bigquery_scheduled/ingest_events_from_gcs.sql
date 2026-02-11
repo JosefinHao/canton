@@ -1,9 +1,9 @@
--- BigQuery Scheduled Query: Ingest new events from GCS updates
+-- BigQuery Scheduled Query: Ingest new events from GCS into raw.events
 -- Schedule: Daily
 --
--- This query loads new event data from the GCS updates external table
--- into the native raw.events table. It only loads days that don't
--- already exist in the native table, preventing duplicates.
+-- This query loads new event data from the GCS external table
+-- (canton-bucket/raw/updates/events/) into the native raw.events table.
+-- It deduplicates to prevent inserting rows that already exist.
 --
 -- Prerequisites:
 -- - External table `raw.events_updates_external` must exist pointing
