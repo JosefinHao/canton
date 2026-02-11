@@ -269,6 +269,7 @@ class DataIngestionPipeline:
                     'year': dt.year if dt else None,
                     'month': dt.month if dt else None,
                     'day': dt.day if dt else None,
+                    'event_date': dt.strftime('%Y-%m-%d') if dt else None,
                 }
                 events.append(event)
 

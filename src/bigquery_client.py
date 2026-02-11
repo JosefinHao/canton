@@ -268,7 +268,7 @@ class BigQueryClient:
             reassignment_counter, source_synchronizer, target_synchronizer,
             unassign_id, submitter,
             payload, contract_key, exercise_result, raw_event, trace_context,
-            year, month, day
+            year, month, day, event_date
         )
         SELECT
             event_id,
@@ -309,7 +309,8 @@ class BigQueryClient:
             -- Date parts
             year,
             month,
-            day
+            day,
+            event_date
         FROM `{self.raw_table_id}`
         {where_clause}
         """
