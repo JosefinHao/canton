@@ -135,14 +135,18 @@ gcloud compute addresses describe canton-nat-ip \
 - Clustered by `template_id`, `event_type`, `migration_id`
 
 **Scheduled Query Configuration:**
-| Setting | Value |
-|---------|-------|
-| Name | `transform_raw_events` |
-| Schedule | Daily |
-| Location | US |
-| Write Disposition | WRITE_APPEND (incremental) |
 
-**SQL File:** `bigquery_scheduled/transform_events.sql`
+Two daily BigQuery scheduled queries run in sequence:
+
+| Setting | Ingest (GCS → raw.events) | Transform (raw → parsed) |
+|---------|---------------------------|--------------------------|
+| Name | `ingest_events_from_gcs` | `transform_raw_events` |
+| Schedule | Daily at 00:00 UTC | Daily at 01:00 UTC |
+| Location | US | US |
+| SQL File | `bigquery_scheduled/ingest_events_from_gcs.sql` | `bigquery_scheduled/transform_events.sql` |
+| Lookback | 1-day (`DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`) | 1-day (`DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`) |
+| Dedup | `NOT EXISTS` on `event_id + event_date` | `NOT EXISTS` on `event_id + event_date` |
+| Est. daily cost | ~$0.50 (~80 GB scanned) | ~$1.00 (~160 GB scanned) |
 
 **Key Transformations:**
 ```sql
@@ -408,23 +412,27 @@ python scripts/run_ingestion.py --max-pages 50 --page-size 1000
 */15 * * * * cd /path/to/canton && /usr/bin/python3 scripts/run_ingestion.py >> /var/log/canton-ingestion.log 2>&1
 ```
 
-### Option 2: BigQuery Scheduled Query (Transformation Only)
+### Option 2: BigQuery Scheduled Queries (GCS-Based Pipeline) - RECOMMENDED
 
-Use BigQuery's native scheduled queries for transformation. This doesn't fetch new data but transforms any raw data that exists.
+Two daily scheduled queries that load new events from GCS and transform them. This is the primary data pipeline.
+
+**Query 1: `ingest_events_from_gcs`** (Daily at 00:00 UTC)
+- Reads new parquet files from `gs://canton-bucket/raw/updates/events/` via external table
+- Inserts into `raw.events` with dedup on `event_id + event_date`
+- SQL: `bigquery_scheduled/ingest_events_from_gcs.sql`
+
+**Query 2: `transform_raw_events`** (Daily at 01:00 UTC)
+- Transforms `raw.events` → `transformed.events_parsed`
+- Parses timestamps, flattens arrays, parses JSON fields
+- SQL: `bigquery_scheduled/transform_events.sql`
 
 **Setup via Console:**
 1. Go to [BigQuery Console](https://console.cloud.google.com/bigquery?project=governence-483517)
 2. Click "Scheduled queries" in the left menu
 3. Click "Create scheduled query"
-4. Paste contents of `bigquery_scheduled/transform_events.sql`
-5. Set schedule to "every 15 minutes"
-6. Click "Schedule"
-
-**Setup via CLI:**
-```bash
-cd bigquery_scheduled
-./setup_scheduled_query.sh
-```
+4. Paste contents of `bigquery_scheduled/ingest_events_from_gcs.sql`
+5. Set schedule to daily at 00:00 UTC, location: US
+6. Repeat for `bigquery_scheduled/transform_events.sql` at 01:00 UTC
 
 ### Option 3: Cloud Run (Containerized) - RECOMMENDED
 

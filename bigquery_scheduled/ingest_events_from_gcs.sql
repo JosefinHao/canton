@@ -1,5 +1,5 @@
 -- BigQuery Scheduled Query: Ingest new events from GCS into raw.events
--- Schedule: Daily
+-- Schedule: Daily at 00:00 UTC
 --
 -- This query loads new event data from the GCS external table
 -- (canton-bucket/raw/updates/events/) into the native raw.events table.
