@@ -993,7 +993,7 @@ def phase5_summary_report(
         print(f"  Only in /v2/updates:           {phase2_results['total_updates_only']}")
         print(f"  Only in /v0/events:            {phase2_results['total_events_only']}")
         print(f"  Ordering matches:              "
-              f"{num_windows - phase2_results['ordering_mismatches']}/{len(phase2_results['windows'])}")
+              f"{len(phase2_results['windows']) - phase2_results['ordering_mismatches']}/{len(phase2_results['windows'])}")
 
         if phase2_results["total_updates_only"] == 0:
             report["findings"].append(
