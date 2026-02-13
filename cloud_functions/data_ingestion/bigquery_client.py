@@ -122,7 +122,7 @@ class BigQueryClient:
         query = f"""
         SELECT MAX(migration_id) as migration_id
         FROM `{self.raw_table_id}`
-        WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+        WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
         """
 
         try:
@@ -136,7 +136,7 @@ class BigQueryClient:
                 query2 = f"""
                 SELECT MAX(recorded_at) as recorded_at
                 FROM `{self.raw_table_id}`
-                WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
                   AND migration_id = {max_migration_id}
                 """
                 results2 = list(self.client.query(query2).result())
@@ -181,7 +181,7 @@ class BigQueryClient:
         query = f"""
         SELECT MAX(migration_id) as migration_id
         FROM `{self.parsed_table_id}`
-        WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+        WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
         """
 
         try:
@@ -195,7 +195,7 @@ class BigQueryClient:
                 query2 = f"""
                 SELECT MAX(recorded_at) as recorded_at
                 FROM `{self.parsed_table_id}`
-                WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+                WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
                   AND migration_id = {max_migration_id}
                 """
                 results2 = list(self.client.query(query2).result())
@@ -258,7 +258,7 @@ class BigQueryClient:
         where_clause = ""
         if last_migration_id is not None and last_recorded_at is not None:
             where_clause = f"""
-            WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+            WHERE event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
               AND ((migration_id > {last_migration_id})
                 OR (migration_id = {last_migration_id} AND recorded_at > '{last_recorded_at}'))
             """
