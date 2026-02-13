@@ -204,6 +204,7 @@ def fetch_events_page(client, cursor_migration_id, cursor_record_time, page_size
 def phase1_schema_and_field_diff(
     client: SpliceScanClient,
     sample_size: int = 50,
+    start_migration_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Fetch a sample of update_ids from both endpoints, do recursive deep diff.
@@ -229,7 +230,7 @@ def phase1_schema_and_field_diff(
 
     # Collect update_ids by paginating through /v2/updates
     # Sample from beginning, middle, and recent data
-    update_ids = _collect_sample_update_ids(client, sample_size)
+    update_ids = _collect_sample_update_ids(client, sample_size, start_migration_id=start_migration_id)
     results["sample_size_actual"] = len(update_ids)
 
     print(f"  Collected {len(update_ids)} update_ids to compare.\n")
@@ -300,19 +301,32 @@ def phase1_schema_and_field_diff(
     return results
 
 
-def _discover_data_range(client: SpliceScanClient) -> List[Dict]:
+def _discover_data_range(
+    client: SpliceScanClient,
+    start_migration_id: Optional[int] = None,
+) -> List[Dict]:
     """
     Discover the full data range by paginating until exhaustion.
     Returns a list of cursor checkpoints: [{"migration_id": ..., "record_time": ...}, ...]
     collected every N pages so we can later jump to any percentile.
+
+    If start_migration_id is provided, begins pagination from that migration_id
+    with an early record_time to skip older migration data.
     """
     checkpoints = []
-    cursor_mig = None
-    cursor_rt = None
     total_updates = 0
     checkpoint_interval = 5  # Save a checkpoint every N pages
 
-    print("  Discovering data range (this may take a moment)...")
+    if start_migration_id is not None:
+        cursor_mig = start_migration_id
+        # Use a very early record_time to start from the beginning of this migration
+        cursor_rt = "2000-01-01T00:00:00Z"
+        print(f"  Discovering data range (starting from migration_id={start_migration_id})...")
+    else:
+        cursor_mig = None
+        cursor_rt = None
+        print("  Discovering data range (from beginning, all migrations)...")
+
     page_num = 0
     while True:
         txns, after = fetch_updates_page(client, cursor_mig, cursor_rt, 500)
@@ -338,6 +352,11 @@ def _discover_data_range(client: SpliceScanClient) -> List[Dict]:
         cursor_rt = after.get("after_record_time")
         time.sleep(0.05)
 
+        # Print progress every 20 pages
+        if page_num % 20 == 0:
+            print(f"    ... {page_num} pages, ~{total_updates} updates so far, "
+                  f"at {cursor_rt}", flush=True)
+
     # Also save the last checkpoint
     if txns:
         last = txns[-1]
@@ -350,6 +369,7 @@ def _discover_data_range(client: SpliceScanClient) -> List[Dict]:
 
     if checkpoints:
         print(f"  Data range: {checkpoints[0]['record_time']} .. {checkpoints[-1]['record_time']}")
+        print(f"  Migration IDs seen: {sorted(set(cp['migration_id'] for cp in checkpoints))}")
         print(f"  Total updates discovered: ~{total_updates} across {page_num} pages, "
               f"{len(checkpoints)} checkpoints")
     else:
@@ -361,12 +381,13 @@ def _discover_data_range(client: SpliceScanClient) -> List[Dict]:
 def _collect_sample_update_ids(
     client: SpliceScanClient,
     target_count: int,
+    start_migration_id: Optional[int] = None,
 ) -> List[str]:
     """
     Collect update_ids from 3 regions: beginning, mid-point, and recent data.
     First discovers the full range, then samples from evenly-spaced positions.
     """
-    checkpoints = _discover_data_range(client)
+    checkpoints = _discover_data_range(client, start_migration_id=start_migration_id)
     if not checkpoints:
         return []
 
@@ -468,6 +489,7 @@ def phase2_transaction_coverage(
     num_windows: int = 3,
     window_pages: int = 10,
     page_size: int = 100,
+    start_migration_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Fetch large windows from both endpoints using identical cursors, compare sets.
@@ -484,7 +506,7 @@ def phase2_transaction_coverage(
     }
 
     # First discover the data range so we can place windows evenly
-    checkpoints = _discover_data_range(client)
+    checkpoints = _discover_data_range(client, start_migration_id=start_migration_id)
 
     if not checkpoints:
         print("  No data found. Cannot run Phase 2.")
@@ -502,10 +524,14 @@ def phase2_transaction_coverage(
     for win_idx, start_cp in enumerate(window_starts):
         banner(f"Window {win_idx + 1}/{num_windows}", char="·")
 
-        # Use cursor from just before the checkpoint (or None for first)
+        # Use cursor from just before the checkpoint (or starting cursor for first)
         if win_idx == 0 and start_cp == checkpoints[0]:
-            cursor_mig = None
-            cursor_rt = None
+            if start_migration_id is not None:
+                cursor_mig = start_migration_id
+                cursor_rt = "2000-01-01T00:00:00Z"
+            else:
+                cursor_mig = None
+                cursor_rt = None
         else:
             cursor_mig = start_cp["migration_id"]
             cursor_rt = start_cp["record_time"]
@@ -637,6 +663,7 @@ def _print_phase2_summary(results: Dict):
 def phase3_event_type_coverage(
     client: SpliceScanClient,
     sample_size: int = 50,
+    start_migration_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Find examples of each event type and verify both endpoints handle them identically.
@@ -660,7 +687,7 @@ def phase3_event_type_coverage(
 
     # Collect a diverse sample
     print("  Collecting updates sample for event type analysis...")
-    update_ids = _collect_sample_update_ids(client, sample_size)
+    update_ids = _collect_sample_update_ids(client, sample_size, start_migration_id=start_migration_id)
 
     for i, uid in enumerate(update_ids):
         print(f"  [{i+1}/{len(update_ids)}] Checking {uid[:32]}...", end=" ", flush=True)
@@ -805,6 +832,7 @@ def phase4_template_choice_coverage(
     client: SpliceScanClient,
     page_size: int = 200,
     num_pages: int = 20,
+    start_migration_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Collect all unique (template_id, choice) pairs from both endpoints.
@@ -827,8 +855,12 @@ def phase4_template_choice_coverage(
 
     # ── Collect from /v2/updates ──
     print("\n  Collecting template/choice pairs from /v2/updates...")
-    u_cursor_mig = None
-    u_cursor_rt = None
+    if start_migration_id is not None:
+        u_cursor_mig = start_migration_id
+        u_cursor_rt = "2000-01-01T00:00:00Z"
+    else:
+        u_cursor_mig = None
+        u_cursor_rt = None
     template_to_update_id = {}  # template_id → first update_id seen
 
     for p in range(num_pages):
@@ -859,8 +891,12 @@ def phase4_template_choice_coverage(
 
     # ── Collect from /v0/events (same window) ──
     print("\n  Collecting template/choice pairs from /v0/events...")
-    e_cursor_mig = None
-    e_cursor_rt = None
+    if start_migration_id is not None:
+        e_cursor_mig = start_migration_id
+        e_cursor_rt = "2000-01-01T00:00:00Z"
+    else:
+        e_cursor_mig = None
+        e_cursor_rt = None
 
     for p in range(num_pages):
         items, after = fetch_events_page(client, e_cursor_mig, e_cursor_rt, page_size)
@@ -1236,6 +1272,13 @@ def main():
         help="Path to save structured JSON report (e.g., output/report.json)",
     )
     parser.add_argument(
+        "--migration-id",
+        type=int,
+        default=None,
+        help="Start from this migration ID (e.g., 4 for current mainnet). "
+             "If not set, starts from the very beginning (migration 0).",
+    )
+    parser.add_argument(
         "--url",
         default=BASE_URL,
         help="Scan API base URL",
@@ -1245,6 +1288,7 @@ def main():
     banner("Canton Scan API: Comprehensive /v2/updates vs /v0/events Comparison", char="█")
     print(f"  Time:        {datetime.utcnow().isoformat()}Z")
     print(f"  API:         {args.url}")
+    print(f"  Migration:   {args.migration_id or 'auto (from beginning)'}")
     print(f"  Sample size: {args.sample_size}")
     print(f"  Windows:     {args.num_windows} x {args.window_pages} pages")
     print(f"  Page size:   {args.page_size}")
@@ -1259,10 +1303,12 @@ def main():
 
     run_all = args.phase is None
 
+    mig_id = args.migration_id
+
     # Phase 1
     if run_all or args.phase == 1:
         phase1_results = phase1_schema_and_field_diff(
-            client, sample_size=args.sample_size
+            client, sample_size=args.sample_size, start_migration_id=mig_id,
         )
 
     # Phase 2
@@ -1272,18 +1318,19 @@ def main():
             num_windows=args.num_windows,
             window_pages=args.window_pages,
             page_size=args.page_size,
+            start_migration_id=mig_id,
         )
 
     # Phase 3
     if run_all or args.phase == 3:
         phase3_results = phase3_event_type_coverage(
-            client, sample_size=args.sample_size
+            client, sample_size=args.sample_size, start_migration_id=mig_id,
         )
 
     # Phase 4
     if run_all or args.phase == 4:
         phase4_results = phase4_template_choice_coverage(
-            client, page_size=args.page_size, num_pages=20
+            client, page_size=args.page_size, num_pages=20, start_migration_id=mig_id,
         )
 
     # Phase 5
