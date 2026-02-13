@@ -255,12 +255,20 @@ def phase1_schema_and_field_diff(
         e_body, verdict = unwrap_events_response(events_resp)
 
         # Track verdict keys
-        if verdict:
+        if verdict is not None:
             results["verdict_keys"].update(collect_all_keys_recursive(verdict))
             if len(results["verdict_samples"]) < 3:
                 results["verdict_samples"].append({
                     "update_id": uid,
                     "verdict": verdict,
+                })
+        elif "verdict" in events_resp:
+            # verdict key exists but is None/empty
+            if len(results["verdict_samples"]) < 1:
+                results["verdict_samples"].append({
+                    "update_id": uid,
+                    "verdict_raw": events_resp.get("verdict"),
+                    "note": "verdict key present but value is None/empty",
                 })
 
         # Track event-level keys from events_by_id
@@ -292,62 +300,104 @@ def phase1_schema_and_field_diff(
     return results
 
 
+def _discover_data_range(client: SpliceScanClient) -> List[Dict]:
+    """
+    Discover the full data range by paginating until exhaustion.
+    Returns a list of cursor checkpoints: [{"migration_id": ..., "record_time": ...}, ...]
+    collected every N pages so we can later jump to any percentile.
+    """
+    checkpoints = []
+    cursor_mig = None
+    cursor_rt = None
+    total_updates = 0
+    checkpoint_interval = 5  # Save a checkpoint every N pages
+
+    print("  Discovering data range (this may take a moment)...")
+    page_num = 0
+    while True:
+        txns, after = fetch_updates_page(client, cursor_mig, cursor_rt, 500)
+        if not txns:
+            break
+
+        total_updates += len(txns)
+        page_num += 1
+
+        # Save checkpoint from the FIRST transaction of this page
+        if page_num % checkpoint_interval == 1 or page_num == 1:
+            first = txns[0]
+            checkpoints.append({
+                "migration_id": first.get("migration_id"),
+                "record_time": first.get("record_time"),
+                "page": page_num,
+                "total_so_far": total_updates,
+            })
+
+        if not after:
+            break
+        cursor_mig = after.get("after_migration_id")
+        cursor_rt = after.get("after_record_time")
+        time.sleep(0.05)
+
+    # Also save the last checkpoint
+    if txns:
+        last = txns[-1]
+        checkpoints.append({
+            "migration_id": last.get("migration_id"),
+            "record_time": last.get("record_time"),
+            "page": page_num,
+            "total_so_far": total_updates,
+        })
+
+    if checkpoints:
+        print(f"  Data range: {checkpoints[0]['record_time']} .. {checkpoints[-1]['record_time']}")
+        print(f"  Total updates discovered: ~{total_updates} across {page_num} pages, "
+              f"{len(checkpoints)} checkpoints")
+    else:
+        print("  WARNING: No data found!")
+
+    return checkpoints
+
+
 def _collect_sample_update_ids(
     client: SpliceScanClient,
     target_count: int,
 ) -> List[str]:
     """
-    Collect update_ids from 3 regions: beginning, a mid-point, and recent data.
+    Collect update_ids from 3 regions: beginning, mid-point, and recent data.
+    First discovers the full range, then samples from evenly-spaced positions.
     """
+    checkpoints = _discover_data_range(client)
+    if not checkpoints:
+        return []
+
     ids = []
     per_region = max(target_count // 3, 5)
+    num_cp = len(checkpoints)
 
-    # Region 1: From the very beginning (no cursor)
-    print("  Sampling from beginning of history...")
-    txns, after = fetch_updates_page(client, None, None, per_region)
-    ids.extend(t["update_id"] for t in txns if "update_id" in t)
-    time.sleep(REQUEST_DELAY)
+    # Pick 3 evenly-spaced checkpoint indices
+    if num_cp >= 3:
+        indices = [0, num_cp // 2, num_cp - 2]  # beginning, middle, near-end
+    elif num_cp == 2:
+        indices = [0, 1]
+    else:
+        indices = [0]
 
-    if not after:
-        return ids
+    for i, cp_idx in enumerate(indices):
+        cp = checkpoints[cp_idx]
+        region_name = ["beginning", "mid-history", "recent"][i] if i < 3 else f"region {i+1}"
+        print(f"  Sampling from {region_name} (record_time={cp['record_time']})...")
 
-    # Skip ahead to mid-point: fetch and discard pages to advance cursor
-    print("  Skipping ahead to mid-history...")
-    mid_cursor_mig = after.get("after_migration_id")
-    mid_cursor_rt = after.get("after_record_time")
-    for _ in range(50):  # Skip ~50 pages to reach mid-history
-        txns, after = fetch_updates_page(client, mid_cursor_mig, mid_cursor_rt, 500)
-        if not txns or not after:
-            break
-        mid_cursor_mig = after.get("after_migration_id")
-        mid_cursor_rt = after.get("after_record_time")
-        time.sleep(0.1)
-
-    # Region 2: Mid-history
-    print("  Sampling from mid-history...")
-    txns, after = fetch_updates_page(client, mid_cursor_mig, mid_cursor_rt, per_region)
-    ids.extend(t["update_id"] for t in txns if "update_id" in t)
-    time.sleep(REQUEST_DELAY)
-
-    if not after:
-        return ids
-
-    # Skip ahead to near-recent
-    print("  Skipping ahead to recent history...")
-    recent_cursor_mig = after.get("after_migration_id")
-    recent_cursor_rt = after.get("after_record_time")
-    for _ in range(200):  # Skip more pages
-        txns, after = fetch_updates_page(client, recent_cursor_mig, recent_cursor_rt, 500)
-        if not txns or not after:
-            break
-        recent_cursor_mig = after.get("after_migration_id")
-        recent_cursor_rt = after.get("after_record_time")
-        time.sleep(0.1)
-
-    # Region 3: Recent
-    print("  Sampling from recent history...")
-    txns, after = fetch_updates_page(client, recent_cursor_mig, recent_cursor_rt, per_region)
-    ids.extend(t["update_id"] for t in txns if "update_id" in t)
+        # For the first region, start from the very beginning (no cursor)
+        if cp_idx == 0:
+            txns, _ = fetch_updates_page(client, None, None, per_region)
+        else:
+            # Use the checkpoint just BEFORE the target as cursor (exclusive)
+            prev_cp = checkpoints[cp_idx - 1] if cp_idx > 0 else checkpoints[0]
+            txns, _ = fetch_updates_page(
+                client, prev_cp["migration_id"], prev_cp["record_time"], per_region
+            )
+        ids.extend(t["update_id"] for t in txns if "update_id" in t)
+        time.sleep(REQUEST_DELAY)
 
     # Deduplicate while preserving order
     seen = set()
@@ -433,14 +483,34 @@ def phase2_transaction_coverage(
         "ordering_mismatches": 0,
     }
 
-    # Determine starting cursors for each window
-    # Window 1: from the beginning
-    # Window 2+: skip ahead between windows
-    cursor_mig = None
-    cursor_rt = None
+    # First discover the data range so we can place windows evenly
+    checkpoints = _discover_data_range(client)
 
-    for win_idx in range(num_windows):
+    if not checkpoints:
+        print("  No data found. Cannot run Phase 2.")
+        return results
+
+    # Place windows at evenly-spaced checkpoints
+    num_cp = len(checkpoints)
+    if num_cp >= num_windows:
+        # Evenly space: first, middle(s), last
+        step = max(1, (num_cp - 1) // max(num_windows - 1, 1))
+        window_starts = [checkpoints[min(i * step, num_cp - 1)] for i in range(num_windows)]
+    else:
+        window_starts = checkpoints[:num_windows]
+
+    for win_idx, start_cp in enumerate(window_starts):
         banner(f"Window {win_idx + 1}/{num_windows}", char="·")
+
+        # Use cursor from just before the checkpoint (or None for first)
+        if win_idx == 0 and start_cp == checkpoints[0]:
+            cursor_mig = None
+            cursor_rt = None
+        else:
+            cursor_mig = start_cp["migration_id"]
+            cursor_rt = start_cp["record_time"]
+
+        print(f"  Starting from record_time={cursor_rt or 'beginning'}")
 
         # ── Fetch from /v2/updates ──
         print(f"  Fetching /v2/updates ({window_pages} pages)...")
@@ -537,26 +607,6 @@ def phase2_transaction_coverage(
             print(f"    Updates time:  {min(u_data.values())} .. {max(u_data.values())}")
         if e_data:
             print(f"    Events time:   {min(e_data.values())} .. {max(e_data.values())}")
-
-        if only_u:
-            print(f"    Sample only-in-updates: {sorted(only_u)[:3]}")
-        if only_e:
-            print(f"    Sample only-in-events:  {sorted(only_e)[:3]}")
-
-        # Advance cursor for next window — skip ahead
-        if win_idx < num_windows - 1:
-            print("\n  Skipping ahead to next window...")
-            skip_cursor_mig = u_cursor_mig
-            skip_cursor_rt = u_cursor_rt
-            for _ in range(100):
-                txns, after = fetch_updates_page(client, skip_cursor_mig, skip_cursor_rt, 500)
-                if not txns or not after:
-                    break
-                skip_cursor_mig = after.get("after_migration_id")
-                skip_cursor_rt = after.get("after_record_time")
-                time.sleep(0.05)
-            cursor_mig = skip_cursor_mig
-            cursor_rt = skip_cursor_rt
 
     # Overall summary
     _print_phase2_summary(results)
@@ -1069,7 +1119,7 @@ def phase5_summary_report(
     print("│  5. VERDICT FIELD ASSESSMENT                                │")
     print("└─────────────────────────────────────────────────────────────┘")
 
-    if phase1_results and phase1_results.get("verdict_samples"):
+    if phase1_results and phase1_results.get("verdict_keys"):
         print("\n  The 'verdict' field is ONLY present in /v0/events responses.")
         print("  It contains:")
         print("    - finalization_time:           When the transaction was finalized")
@@ -1084,8 +1134,27 @@ def phase5_summary_report(
             "VERDICT FIELD: /v0/events provides a 'verdict' field with finalization metadata "
             "that /v2/updates does not return."
         )
+    elif phase1_results and phase1_results.get("verdict_samples"):
+        # Verdict key exists but value was null/empty for all samples
+        sample = phase1_results["verdict_samples"][0]
+        print(f"\n  The 'verdict' key exists in /v0/events responses but was null/empty.")
+        print(f"  Sample: {sample}")
+        report["findings"].append(
+            "VERDICT FIELD: Present in /v0/events response structure but null/empty for sampled data."
+        )
+    elif phase1_results:
+        has_verdict_key = "verdict" in phase1_results.get("top_level_keys_events", set())
+        if has_verdict_key:
+            print(f"\n  The 'verdict' key is in /v0/events response but was None for all {phase1_results['updates_compared']} samples.")
+            print("  This may be because verdict data is only available for more recent transactions,")
+            print("  or it requires specific API permissions.")
+            report["findings"].append(
+                "VERDICT FIELD: Key present in /v0/events but value was None for all sampled transactions."
+            )
+        else:
+            print("  (No verdict data collected)")
     else:
-        print("  (No verdict data collected)")
+        print("  (Phase 1 not run)")
 
     # ── Final recommendation ──
     print("\n┌─────────────────────────────────────────────────────────────┐")
