@@ -12,15 +12,49 @@ Triggered by Cloud Scheduler every 15 minutes.
 import json
 import logging
 import os
+import sys
 from flask import Flask, request, jsonify
 
 from data_ingestion_pipeline import DataIngestionPipeline, PipelineConfig, PipelineStats
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+
+class StructuredLogFormatter(logging.Formatter):
+    """Formatter that outputs JSON for Cloud Logging (Stackdriver).
+
+    Cloud Run automatically captures stdout/stderr. When output is JSON with
+    a 'severity' field, Cloud Logging parses it into structured log entries,
+    enabling filtering, alerting, and log-based metrics.
+    """
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            'severity': record.levelname,
+            'message': record.getMessage(),
+            'logger': record.name,
+            'module': record.module,
+        }
+        if record.exc_info and record.exc_info[0] is not None:
+            log_entry['exception'] = self.formatException(record.exc_info)
+        return json.dumps(log_entry)
+
+
+def setup_logging():
+    """Configure structured JSON logging for Cloud environments."""
+    handler = logging.StreamHandler(sys.stdout)
+    # Use JSON format in Cloud Run (K_SERVICE is set by Cloud Run),
+    # human-readable format for local development
+    if os.environ.get('K_SERVICE'):
+        handler.setFormatter(StructuredLogFormatter())
+    else:
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        ))
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.addHandler(handler)
+    root.setLevel(logging.INFO)
+
+
+setup_logging()
 logger = logging.getLogger(__name__)
 
 # Initialize Flask app

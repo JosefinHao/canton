@@ -35,6 +35,7 @@ class PipelineConfig:
     auto_transform: bool = True
     transform_batch_threshold: int = 1000
     api_delay_seconds: float = 0.1
+    max_consecutive_failures: int = 3  # Abort after N consecutive API failures
 
 
 @dataclass
@@ -45,11 +46,14 @@ class PipelineStats:
     pages_fetched: int = 0
     events_fetched: int = 0
     events_inserted: int = 0
+    insert_failures: int = 0
     rows_transformed: int = 0
     errors: List[str] = field(default_factory=list)
     start_position: Dict[str, Any] = field(default_factory=dict)
     end_position: Dict[str, Any] = field(default_factory=dict)
     success: bool = False
+    consecutive_fetch_failures: int = 0
+    aborted_reason: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -103,12 +107,27 @@ class DataIngestionPipeline:
             current_migration_id = start_migration_id
             current_recorded_at = start_recorded_at
             total_events_buffer = []
+            consecutive_failures = 0
 
             for page_num in range(self.config.max_pages_per_run):
                 updates_response = self._fetch_updates(current_migration_id, current_recorded_at)
 
                 if not updates_response:
-                    break
+                    consecutive_failures += 1
+                    if consecutive_failures >= self.config.max_consecutive_failures:
+                        error_msg = (
+                            f"Aborting: {consecutive_failures} consecutive API fetch failures. "
+                            f"Last position: migration_id={current_migration_id}"
+                        )
+                        logger.error(error_msg)
+                        stats.errors.append(error_msg)
+                        stats.aborted_reason = "consecutive_fetch_failures"
+                        stats.consecutive_fetch_failures = consecutive_failures
+                        break
+                    continue
+
+                # Reset failure counter on success
+                consecutive_failures = 0
 
                 updates = updates_response.get('updates', updates_response.get('transactions', []))
                 if not updates:
@@ -122,7 +141,9 @@ class DataIngestionPipeline:
 
                 if len(total_events_buffer) >= self.config.batch_size:
                     inserted = self.bq_client.insert_raw_events(total_events_buffer)
+                    failed = len(total_events_buffer) - inserted
                     stats.events_inserted += inserted
+                    stats.insert_failures += failed
                     total_events_buffer = []
 
                 if updates:
@@ -139,7 +160,9 @@ class DataIngestionPipeline:
 
             if total_events_buffer:
                 inserted = self.bq_client.insert_raw_events(total_events_buffer)
+                failed = len(total_events_buffer) - inserted
                 stats.events_inserted += inserted
+                stats.insert_failures += failed
 
             stats.end_position = {
                 'migration_id': current_migration_id,

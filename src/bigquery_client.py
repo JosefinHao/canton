@@ -69,15 +69,20 @@ class BigQueryClient:
                 logger.warning(f"Could not create state table: {e}")
 
     def _get_state(self, table_name: str) -> Tuple[Optional[int], Optional[str]]:
-        """Get the last position from state table."""
+        """Get the last position from state table using parameterized query."""
         query = f"""
         SELECT migration_id, recorded_at
         FROM `{self.state_table_id}`
-        WHERE table_name = '{table_name}'
+        WHERE table_name = @table_name
         LIMIT 1
         """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("table_name", "STRING", table_name),
+            ]
+        )
         try:
-            results = list(self.client.query(query).result())
+            results = list(self.client.query(query, job_config=job_config).result())
             if results:
                 row = results[0]
                 return row.migration_id, row.recorded_at
@@ -87,21 +92,28 @@ class BigQueryClient:
             return None, None
 
     def _update_state(self, table_name: str, migration_id: int, recorded_at: str):
-        """Update the state table with new position."""
+        """Update the state table with new position using parameterized query."""
         query = f"""
         MERGE `{self.state_table_id}` T
-        USING (SELECT '{table_name}' as table_name) S
+        USING (SELECT @table_name as table_name) S
         ON T.table_name = S.table_name
         WHEN MATCHED THEN
-            UPDATE SET migration_id = {migration_id},
-                       recorded_at = '{recorded_at}',
+            UPDATE SET migration_id = @migration_id,
+                       recorded_at = @recorded_at,
                        updated_at = CURRENT_TIMESTAMP()
         WHEN NOT MATCHED THEN
             INSERT (table_name, migration_id, recorded_at, updated_at)
-            VALUES ('{table_name}', {migration_id}, '{recorded_at}', CURRENT_TIMESTAMP())
+            VALUES (@table_name, @migration_id, @recorded_at, CURRENT_TIMESTAMP())
         """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("table_name", "STRING", table_name),
+                bigquery.ScalarQueryParameter("migration_id", "INT64", migration_id),
+                bigquery.ScalarQueryParameter("recorded_at", "STRING", recorded_at),
+            ]
+        )
         try:
-            self.client.query(query).result()
+            self.client.query(query, job_config=job_config).result()
             logger.info(f"Updated state for {table_name}: migration_id={migration_id}")
         except Exception as e:
             logger.warning(f"Could not update state: {e}")
@@ -238,8 +250,14 @@ class BigQueryClient:
         )
 
         if errors:
-            logger.error(f"Errors inserting rows: {errors}")
-            return len(events) - len(errors)
+            failed_count = len(errors)
+            # Log first few errors for debugging, avoid flooding logs
+            sample_errors = errors[:3]
+            logger.error(
+                f"BigQuery streaming insert failed for {failed_count}/{len(events)} rows. "
+                f"Sample errors: {sample_errors}"
+            )
+            return len(events) - failed_count
 
         logger.info(f"Inserted {len(events)} events")
         return len(events)
@@ -360,20 +378,121 @@ class BigQueryClient:
         except Exception as e:
             return {'error': str(e)}
 
+    def get_data_freshness(self) -> Dict[str, Any]:
+        """Check data freshness by comparing latest event_date to current date.
+
+        Returns lag in hours for both raw and parsed tables using partition metadata
+        (INFORMATION_SCHEMA.PARTITIONS) which is free and fast.
+        """
+        freshness = {}
+        for label, table_id in [('raw', self.raw_table_id), ('parsed', self.parsed_table_id)]:
+            try:
+                dataset_ref = table_id.rsplit('.', 1)[0]
+                table_name = table_id.rsplit('.', 1)[1]
+                query = f"""
+                SELECT MAX(partition_id) as latest_partition
+                FROM `{dataset_ref}.INFORMATION_SCHEMA.PARTITIONS`
+                WHERE table_name = @table_name
+                  AND partition_id != '__NULL__'
+                  AND partition_id != '__UNPARTITIONED__'
+                """
+                job_config = bigquery.QueryJobConfig(
+                    query_parameters=[
+                        bigquery.ScalarQueryParameter("table_name", "STRING", table_name),
+                    ]
+                )
+                results = list(self.client.query(query, job_config=job_config).result())
+                if results and results[0].latest_partition:
+                    partition_str = results[0].latest_partition
+                    # Partition ID format: YYYYMMDD
+                    latest_date = datetime.strptime(partition_str, '%Y%m%d')
+                    lag_hours = (datetime.utcnow() - latest_date).total_seconds() / 3600
+                    freshness[label] = {
+                        'latest_partition': partition_str,
+                        'lag_hours': round(lag_hours, 1),
+                        'is_stale': lag_hours > 48,  # Alert if >48h behind
+                    }
+                else:
+                    freshness[label] = {'latest_partition': None, 'lag_hours': None, 'is_stale': True}
+            except Exception as e:
+                freshness[label] = {'error': str(e)}
+        return freshness
+
+    def get_row_count_consistency(self) -> Dict[str, Any]:
+        """Compare row counts between raw and parsed tables for recent partitions.
+
+        Uses partition metadata (free) to detect transformation lag.
+        """
+        try:
+            query = f"""
+            WITH raw_counts AS (
+                SELECT partition_id, total_rows
+                FROM `{self.project_id}.{self.raw_dataset}.INFORMATION_SCHEMA.PARTITIONS`
+                WHERE table_name = @raw_table
+                  AND partition_id NOT IN ('__NULL__', '__UNPARTITIONED__')
+                  AND partition_id >= FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY))
+            ),
+            parsed_counts AS (
+                SELECT partition_id, total_rows
+                FROM `{self.project_id}.{self.transformed_dataset}.INFORMATION_SCHEMA.PARTITIONS`
+                WHERE table_name = @parsed_table
+                  AND partition_id NOT IN ('__NULL__', '__UNPARTITIONED__')
+                  AND partition_id >= FORMAT_DATE('%Y%m%d', DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY))
+            )
+            SELECT
+                r.partition_id,
+                r.total_rows as raw_rows,
+                COALESCE(p.total_rows, 0) as parsed_rows,
+                r.total_rows - COALESCE(p.total_rows, 0) as row_difference
+            FROM raw_counts r
+            LEFT JOIN parsed_counts p ON r.partition_id = p.partition_id
+            ORDER BY r.partition_id DESC
+            """
+            job_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("raw_table", "STRING", self.raw_table),
+                    bigquery.ScalarQueryParameter("parsed_table", "STRING", self.parsed_table),
+                ]
+            )
+            results = list(self.client.query(query, job_config=job_config).result())
+            partitions = []
+            total_diff = 0
+            for row in results:
+                diff = row.row_difference
+                total_diff += diff
+                partitions.append({
+                    'partition': row.partition_id,
+                    'raw_rows': row.raw_rows,
+                    'parsed_rows': row.parsed_rows,
+                    'difference': diff,
+                })
+            return {
+                'partitions': partitions,
+                'total_row_difference': total_diff,
+                'is_consistent': total_diff == 0,
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
     def get_pipeline_status(self) -> Dict[str, Any]:
-        """Get overall pipeline status."""
+        """Get overall pipeline status including freshness and consistency checks."""
+        raw_pos = self.get_last_processed_position()
+        parsed_pos = self.get_last_transformed_position()
+
         return {
             'raw_table': {
                 'table_id': self.raw_table_id,
                 'stats': self.get_table_stats(self.raw_table_id),
-                'last_position': dict(zip(['migration_id', 'recorded_at'], self.get_last_processed_position()))
+                'last_position': dict(zip(['migration_id', 'recorded_at'], raw_pos))
             },
             'parsed_table': {
                 'table_id': self.parsed_table_id,
                 'stats': self.get_table_stats(self.parsed_table_id),
-                'last_position': dict(zip(['migration_id', 'recorded_at'], self.get_last_transformed_position()))
+                'last_position': dict(zip(['migration_id', 'recorded_at'], parsed_pos))
             },
-            'needs_transformation': self.check_for_new_raw_data()
+            'needs_transformation': self.check_for_new_raw_data(),
+            'data_freshness': self.get_data_freshness(),
+            'row_consistency': self.get_row_count_consistency(),
         }
 
     def close(self):
