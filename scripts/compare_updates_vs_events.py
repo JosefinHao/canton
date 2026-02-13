@@ -204,7 +204,7 @@ def fetch_events_page(client, cursor_migration_id, cursor_record_time, page_size
 def phase1_schema_and_field_diff(
     client: SpliceScanClient,
     sample_size: int = 50,
-    start_migration_id: Optional[int] = None,
+    migration_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
     Fetch a sample of update_ids from both endpoints, do recursive deep diff.
@@ -230,7 +230,7 @@ def phase1_schema_and_field_diff(
 
     # Collect update_ids by paginating through /v2/updates
     # Sample from beginning, middle, and recent data
-    update_ids = _collect_sample_update_ids(client, sample_size, start_migration_id=start_migration_id)
+    update_ids = _collect_sample_update_ids(client, sample_size, migration_ids=migration_ids)
     results["sample_size_actual"] = len(update_ids)
 
     print(f"  Collected {len(update_ids)} update_ids to compare.\n")
@@ -301,31 +301,20 @@ def phase1_schema_and_field_diff(
     return results
 
 
-def _discover_data_range(
+def _discover_migration_range(
     client: SpliceScanClient,
-    start_migration_id: Optional[int] = None,
+    migration_id: int,
 ) -> List[Dict]:
     """
-    Discover the full data range by paginating until exhaustion.
-    Returns a list of cursor checkpoints: [{"migration_id": ..., "record_time": ...}, ...]
-    collected every N pages so we can later jump to any percentile.
-
-    If start_migration_id is provided, begins pagination from that migration_id
-    with an early record_time to skip older migration data.
+    Discover the data range for a single migration_id by paginating until exhaustion.
+    Returns a list of cursor checkpoints for this migration.
     """
     checkpoints = []
     total_updates = 0
-    checkpoint_interval = 5  # Save a checkpoint every N pages
+    checkpoint_interval = 5
 
-    if start_migration_id is not None:
-        cursor_mig = start_migration_id
-        # Use a very early record_time to start from the beginning of this migration
-        cursor_rt = "2000-01-01T00:00:00Z"
-        print(f"  Discovering data range (starting from migration_id={start_migration_id})...")
-    else:
-        cursor_mig = None
-        cursor_rt = None
-        print("  Discovering data range (from beginning, all migrations)...")
+    cursor_mig = migration_id
+    cursor_rt = "2000-01-01T00:00:00Z"
 
     page_num = 0
     while True:
@@ -333,10 +322,14 @@ def _discover_data_range(
         if not txns:
             break
 
+        # Stop if we've crossed into a different migration
+        first_mig = txns[0].get("migration_id")
+        if first_mig != migration_id:
+            break
+
         total_updates += len(txns)
         page_num += 1
 
-        # Save checkpoint from the FIRST transaction of this page
         if page_num % checkpoint_interval == 1 or page_num == 1:
             first = txns[0]
             checkpoints.append({
@@ -348,17 +341,20 @@ def _discover_data_range(
 
         if not after:
             break
-        cursor_mig = after.get("after_migration_id")
+        next_mig = after.get("after_migration_id")
+        # Stop if cursor advances past our target migration
+        if next_mig != migration_id:
+            break
+        cursor_mig = next_mig
         cursor_rt = after.get("after_record_time")
         time.sleep(0.05)
 
-        # Print progress every 20 pages
         if page_num % 20 == 0:
-            print(f"    ... {page_num} pages, ~{total_updates} updates so far, "
+            print(f"      ... {page_num} pages, ~{total_updates} updates, "
                   f"at {cursor_rt}", flush=True)
 
-    # Also save the last checkpoint
-    if txns:
+    # Save last checkpoint
+    if txns and txns[-1].get("migration_id") == migration_id:
         last = txns[-1]
         checkpoints.append({
             "migration_id": last.get("migration_id"),
@@ -367,58 +363,102 @@ def _discover_data_range(
             "total_so_far": total_updates,
         })
 
-    if checkpoints:
-        print(f"  Data range: {checkpoints[0]['record_time']} .. {checkpoints[-1]['record_time']}")
-        print(f"  Migration IDs seen: {sorted(set(cp['migration_id'] for cp in checkpoints))}")
-        print(f"  Total updates discovered: ~{total_updates} across {page_num} pages, "
-              f"{len(checkpoints)} checkpoints")
-    else:
-        print("  WARNING: No data found!")
+    return checkpoints, total_updates
 
-    return checkpoints
+
+def _discover_all_migrations(
+    client: SpliceScanClient,
+    migration_ids: List[int],
+) -> Dict[int, List[Dict]]:
+    """
+    Discover data ranges for all specified migration_ids.
+    Returns {migration_id: [checkpoints]}.
+    """
+    print(f"  Discovering data across migration_ids: {migration_ids}")
+    all_checkpoints = {}
+
+    for mig_id in migration_ids:
+        print(f"    Migration {mig_id}...", end=" ", flush=True)
+        checkpoints, total = _discover_migration_range(client, mig_id)
+        all_checkpoints[mig_id] = checkpoints
+        if checkpoints:
+            print(f"{total} updates, "
+                  f"{checkpoints[0]['record_time']} .. {checkpoints[-1]['record_time']}")
+        else:
+            print("no data")
+
+    non_empty = {k: v for k, v in all_checkpoints.items() if v}
+    print(f"  Migrations with data: {sorted(non_empty.keys())}")
+    total_all = sum(cp[-1]["total_so_far"] for cp in non_empty.values())
+    print(f"  Total updates across all migrations: ~{total_all}")
+
+    return all_checkpoints
 
 
 def _collect_sample_update_ids(
     client: SpliceScanClient,
     target_count: int,
-    start_migration_id: Optional[int] = None,
+    migration_ids: Optional[List[int]] = None,
 ) -> List[str]:
     """
-    Collect update_ids from 3 regions: beginning, mid-point, and recent data.
-    First discovers the full range, then samples from evenly-spaced positions.
+    Collect update_ids sampled evenly across all migration_ids.
+    Distributes the sample budget proportionally by data volume.
     """
-    checkpoints = _discover_data_range(client, start_migration_id=start_migration_id)
-    if not checkpoints:
+    if migration_ids is None:
+        migration_ids = [0, 1, 2, 3, 4]
+
+    all_checkpoints = _discover_all_migrations(client, migration_ids)
+
+    # Determine per-migration sample counts proportional to data volume
+    volumes = {}
+    for mig_id, cps in all_checkpoints.items():
+        if cps:
+            volumes[mig_id] = cps[-1]["total_so_far"]
+    total_volume = sum(volumes.values())
+
+    if total_volume == 0:
+        print("  WARNING: No data found across any migration!")
         return []
 
     ids = []
-    per_region = max(target_count // 3, 5)
-    num_cp = len(checkpoints)
+    for mig_id in sorted(volumes.keys()):
+        cps = all_checkpoints[mig_id]
+        # Proportional allocation, minimum 3 per migration
+        proportion = volumes[mig_id] / total_volume
+        n_samples = max(3, int(target_count * proportion))
 
-    # Pick 3 evenly-spaced checkpoint indices
-    if num_cp >= 3:
-        indices = [0, num_cp // 2, num_cp - 2]  # beginning, middle, near-end
-    elif num_cp == 2:
-        indices = [0, 1]
-    else:
-        indices = [0]
-
-    for i, cp_idx in enumerate(indices):
-        cp = checkpoints[cp_idx]
-        region_name = ["beginning", "mid-history", "recent"][i] if i < 3 else f"region {i+1}"
-        print(f"  Sampling from {region_name} (record_time={cp['record_time']})...")
-
-        # For the first region, start from the very beginning (no cursor)
-        if cp_idx == 0:
-            txns, _ = fetch_updates_page(client, None, None, per_region)
+        num_cp = len(cps)
+        # Pick up to 3 evenly-spaced checkpoints within this migration
+        if num_cp >= 3:
+            cp_indices = [0, num_cp // 2, num_cp - 1]
+        elif num_cp == 2:
+            cp_indices = [0, 1]
         else:
-            # Use the checkpoint just BEFORE the target as cursor (exclusive)
-            prev_cp = checkpoints[cp_idx - 1] if cp_idx > 0 else checkpoints[0]
-            txns, _ = fetch_updates_page(
-                client, prev_cp["migration_id"], prev_cp["record_time"], per_region
-            )
-        ids.extend(t["update_id"] for t in txns if "update_id" in t)
-        time.sleep(REQUEST_DELAY)
+            cp_indices = [0]
+
+        samples_per_cp = max(1, n_samples // len(cp_indices))
+
+        for cp_idx in cp_indices:
+            cp = cps[cp_idx]
+            print(f"  Sampling {samples_per_cp} from migration {mig_id} "
+                  f"at {cp['record_time'][:19]}...")
+
+            if cp_idx == 0:
+                # Start from beginning of this migration
+                txns, _ = fetch_updates_page(
+                    client, mig_id, "2000-01-01T00:00:00Z", samples_per_cp
+                )
+            else:
+                prev_cp = cps[cp_idx - 1]
+                txns, _ = fetch_updates_page(
+                    client, prev_cp["migration_id"], prev_cp["record_time"], samples_per_cp
+                )
+
+            # Only take updates from the target migration
+            for t in txns:
+                if t.get("migration_id") == mig_id and "update_id" in t:
+                    ids.append(t["update_id"])
+            time.sleep(REQUEST_DELAY)
 
     # Deduplicate while preserving order
     seen = set()
@@ -489,10 +529,11 @@ def phase2_transaction_coverage(
     num_windows: int = 3,
     window_pages: int = 10,
     page_size: int = 100,
-    start_migration_id: Optional[int] = None,
+    migration_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
     Fetch large windows from both endpoints using identical cursors, compare sets.
+    Places one window per migration_id to cover all migrations.
     """
     banner("PHASE 2: Transaction Coverage (Set Comparison)")
     print(f"  {num_windows} window(s), {window_pages} pages each, page_size={page_size}")
@@ -505,36 +546,45 @@ def phase2_transaction_coverage(
         "ordering_mismatches": 0,
     }
 
-    # First discover the data range so we can place windows evenly
-    checkpoints = _discover_data_range(client, start_migration_id=start_migration_id)
+    if migration_ids is None:
+        migration_ids = [0, 1, 2, 3, 4]
 
-    if not checkpoints:
+    # Discover data for all migrations, then pick windows across them
+    all_checkpoints = _discover_all_migrations(client, migration_ids)
+
+    # Build a flat list of window start cursors spread across all migrations
+    window_starts = []
+    non_empty_migs = sorted(mig for mig, cps in all_checkpoints.items() if cps)
+
+    if not non_empty_migs:
         print("  No data found. Cannot run Phase 2.")
         return results
 
-    # Place windows at evenly-spaced checkpoints
-    num_cp = len(checkpoints)
-    if num_cp >= num_windows:
-        # Evenly space: first, middle(s), last
-        step = max(1, (num_cp - 1) // max(num_windows - 1, 1))
-        window_starts = [checkpoints[min(i * step, num_cp - 1)] for i in range(num_windows)]
-    else:
-        window_starts = checkpoints[:num_windows]
+    # Distribute windows across migrations: at least 1 per migration, extras go to larger ones
+    windows_per_mig = max(1, num_windows // len(non_empty_migs))
+    for mig_id in non_empty_migs:
+        cps = all_checkpoints[mig_id]
+        num_cp = len(cps)
+        n_wins = min(windows_per_mig, num_cp)
+        if num_cp == 1:
+            window_starts.append(cps[0])
+        else:
+            step = max(1, (num_cp - 1) // max(n_wins - 1, 1))
+            for j in range(n_wins):
+                window_starts.append(cps[min(j * step, num_cp - 1)])
+
+    # Cap to requested number
+    window_starts = window_starts[:num_windows]
 
     for win_idx, start_cp in enumerate(window_starts):
-        banner(f"Window {win_idx + 1}/{num_windows}", char="·")
+        banner(f"Window {win_idx + 1}/{len(window_starts)} "
+               f"(migration {start_cp['migration_id']})", char="·")
 
-        # Use cursor from just before the checkpoint (or starting cursor for first)
-        if win_idx == 0 and start_cp == checkpoints[0]:
-            if start_migration_id is not None:
-                cursor_mig = start_migration_id
-                cursor_rt = "2000-01-01T00:00:00Z"
-            else:
-                cursor_mig = None
-                cursor_rt = None
-        else:
-            cursor_mig = start_cp["migration_id"]
-            cursor_rt = start_cp["record_time"]
+        cursor_mig = start_cp["migration_id"]
+        cursor_rt = start_cp["record_time"]
+        # For the very first checkpoint of a migration, use a sentinel
+        if start_cp == all_checkpoints[cursor_mig][0]:
+            cursor_rt = "2000-01-01T00:00:00Z"
 
         print(f"  Starting from record_time={cursor_rt or 'beginning'}")
 
@@ -663,7 +713,7 @@ def _print_phase2_summary(results: Dict):
 def phase3_event_type_coverage(
     client: SpliceScanClient,
     sample_size: int = 50,
-    start_migration_id: Optional[int] = None,
+    migration_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
     Find examples of each event type and verify both endpoints handle them identically.
@@ -687,7 +737,7 @@ def phase3_event_type_coverage(
 
     # Collect a diverse sample
     print("  Collecting updates sample for event type analysis...")
-    update_ids = _collect_sample_update_ids(client, sample_size, start_migration_id=start_migration_id)
+    update_ids = _collect_sample_update_ids(client, sample_size, migration_ids=migration_ids)
 
     for i, uid in enumerate(update_ids):
         print(f"  [{i+1}/{len(update_ids)}] Checking {uid[:32]}...", end=" ", flush=True)
@@ -832,7 +882,7 @@ def phase4_template_choice_coverage(
     client: SpliceScanClient,
     page_size: int = 200,
     num_pages: int = 20,
-    start_migration_id: Optional[int] = None,
+    migration_ids: Optional[List[int]] = None,
 ) -> Dict[str, Any]:
     """
     Collect all unique (template_id, choice) pairs from both endpoints.
@@ -853,74 +903,82 @@ def phase4_template_choice_coverage(
         "spot_check_results": [],
     }
 
-    # ── Collect from /v2/updates ──
-    print("\n  Collecting template/choice pairs from /v2/updates...")
-    if start_migration_id is not None:
-        u_cursor_mig = start_migration_id
-        u_cursor_rt = "2000-01-01T00:00:00Z"
-    else:
-        u_cursor_mig = None
-        u_cursor_rt = None
+    if migration_ids is None:
+        migration_ids = [0, 1, 2, 3, 4]
+
+    pages_per_migration = max(1, num_pages // len(migration_ids))
     template_to_update_id = {}  # template_id → first update_id seen
 
-    for p in range(num_pages):
-        txns, after = fetch_updates_page(client, u_cursor_mig, u_cursor_rt, page_size)
-        print(f"    Page {p+1}: {len(txns)} updates", flush=True)
-        if not txns:
-            break
-        for t in txns:
-            uid = t.get("update_id")
-            for eid, evt in t.get("events_by_id", {}).items():
-                tid = evt.get("template_id", "unknown")
-                choice = evt.get("choice")
-                results["templates_updates"][tid] += 1
-                if choice:
-                    results["choices_updates"][choice] += 1
-                    pair = (tid, choice)
-                else:
-                    pair = (tid, "__created__" if "create_arguments" in evt else "__other__")
-                results["template_choice_pairs_updates"].add(pair)
-                if tid not in template_to_update_id:
-                    template_to_update_id[tid] = uid
-        if after:
-            u_cursor_mig = after.get("after_migration_id")
-            u_cursor_rt = after.get("after_record_time")
-        else:
-            break
-        time.sleep(0.05)
+    # ── Collect from /v2/updates ──
+    print(f"\n  Collecting template/choice pairs from /v2/updates "
+          f"({pages_per_migration} pages per migration)...")
+    for mig_id in migration_ids:
+        u_cursor_mig = mig_id
+        u_cursor_rt = "2000-01-01T00:00:00Z"
+        for p in range(pages_per_migration):
+            txns, after = fetch_updates_page(client, u_cursor_mig, u_cursor_rt, page_size)
+            if not txns:
+                break
+            print(f"    Migration {mig_id}, page {p+1}: {len(txns)} updates", flush=True)
+            for t in txns:
+                if t.get("migration_id") != mig_id:
+                    break
+                uid = t.get("update_id")
+                for eid, evt in t.get("events_by_id", {}).items():
+                    tid = evt.get("template_id", "unknown")
+                    choice = evt.get("choice")
+                    results["templates_updates"][tid] += 1
+                    if choice:
+                        results["choices_updates"][choice] += 1
+                        pair = (tid, choice)
+                    else:
+                        pair = (tid, "__created__" if "create_arguments" in evt else "__other__")
+                    results["template_choice_pairs_updates"].add(pair)
+                    if tid not in template_to_update_id:
+                        template_to_update_id[tid] = uid
+            if after:
+                if after.get("after_migration_id") != mig_id:
+                    break  # Crossed into next migration
+                u_cursor_mig = after.get("after_migration_id")
+                u_cursor_rt = after.get("after_record_time")
+            else:
+                break
+            time.sleep(0.05)
 
-    # ── Collect from /v0/events (same window) ──
-    print("\n  Collecting template/choice pairs from /v0/events...")
-    if start_migration_id is not None:
-        e_cursor_mig = start_migration_id
+    # ── Collect from /v0/events (same migrations) ──
+    print(f"\n  Collecting template/choice pairs from /v0/events "
+          f"({pages_per_migration} pages per migration)...")
+    for mig_id in migration_ids:
+        e_cursor_mig = mig_id
         e_cursor_rt = "2000-01-01T00:00:00Z"
-    else:
-        e_cursor_mig = None
-        e_cursor_rt = None
 
-    for p in range(num_pages):
-        items, after = fetch_events_page(client, e_cursor_mig, e_cursor_rt, page_size)
-        print(f"    Page {p+1}: {len(items)} events", flush=True)
-        if not items:
-            break
-        for item in items:
-            update = item["update"]
-            for eid, evt in update.get("events_by_id", {}).items():
-                tid = evt.get("template_id", "unknown")
-                choice = evt.get("choice")
-                results["templates_events"][tid] += 1
-                if choice:
-                    results["choices_events"][choice] += 1
-                    pair = (tid, choice)
-                else:
-                    pair = (tid, "__created__" if "create_arguments" in evt else "__other__")
-                results["template_choice_pairs_events"].add(pair)
-        if after:
-            e_cursor_mig = after.get("after_migration_id")
-            e_cursor_rt = after.get("after_record_time")
-        else:
-            break
-        time.sleep(0.05)
+        for p in range(pages_per_migration):
+            items, after = fetch_events_page(client, e_cursor_mig, e_cursor_rt, page_size)
+            if not items:
+                break
+            print(f"    Migration {mig_id}, page {p+1}: {len(items)} events", flush=True)
+            for item in items:
+                update = item["update"]
+                if update.get("migration_id") != mig_id:
+                    break
+                for eid, evt in update.get("events_by_id", {}).items():
+                    tid = evt.get("template_id", "unknown")
+                    choice = evt.get("choice")
+                    results["templates_events"][tid] += 1
+                    if choice:
+                        results["choices_events"][choice] += 1
+                        pair = (tid, choice)
+                    else:
+                        pair = (tid, "__created__" if "create_arguments" in evt else "__other__")
+                    results["template_choice_pairs_events"].add(pair)
+            if after:
+                if after.get("after_migration_id") != mig_id:
+                    break
+                e_cursor_mig = after.get("after_migration_id")
+                e_cursor_rt = after.get("after_record_time")
+            else:
+                break
+            time.sleep(0.05)
 
     # ── Compare ──
     results["only_in_updates_pairs"] = (
@@ -1272,11 +1330,10 @@ def main():
         help="Path to save structured JSON report (e.g., output/report.json)",
     )
     parser.add_argument(
-        "--migration-id",
-        type=int,
-        default=None,
-        help="Start from this migration ID (e.g., 4 for current mainnet). "
-             "If not set, starts from the very beginning (migration 0).",
+        "--migration-ids",
+        type=str,
+        default="0,1,2,3,4",
+        help="Comma-separated list of migration IDs to sample from (default: 0,1,2,3,4)",
     )
     parser.add_argument(
         "--url",
@@ -1285,10 +1342,12 @@ def main():
     )
     args = parser.parse_args()
 
+    mig_ids = [int(x.strip()) for x in args.migration_ids.split(",")]
+
     banner("Canton Scan API: Comprehensive /v2/updates vs /v0/events Comparison", char="█")
     print(f"  Time:        {datetime.utcnow().isoformat()}Z")
     print(f"  API:         {args.url}")
-    print(f"  Migration:   {args.migration_id or 'auto (from beginning)'}")
+    print(f"  Migrations:  {mig_ids}")
     print(f"  Sample size: {args.sample_size}")
     print(f"  Windows:     {args.num_windows} x {args.window_pages} pages")
     print(f"  Page size:   {args.page_size}")
@@ -1303,12 +1362,10 @@ def main():
 
     run_all = args.phase is None
 
-    mig_id = args.migration_id
-
     # Phase 1
     if run_all or args.phase == 1:
         phase1_results = phase1_schema_and_field_diff(
-            client, sample_size=args.sample_size, start_migration_id=mig_id,
+            client, sample_size=args.sample_size, migration_ids=mig_ids,
         )
 
     # Phase 2
@@ -1318,19 +1375,19 @@ def main():
             num_windows=args.num_windows,
             window_pages=args.window_pages,
             page_size=args.page_size,
-            start_migration_id=mig_id,
+            migration_ids=mig_ids,
         )
 
     # Phase 3
     if run_all or args.phase == 3:
         phase3_results = phase3_event_type_coverage(
-            client, sample_size=args.sample_size, start_migration_id=mig_id,
+            client, sample_size=args.sample_size, migration_ids=mig_ids,
         )
 
     # Phase 4
     if run_all or args.phase == 4:
         phase4_results = phase4_template_choice_coverage(
-            client, page_size=args.page_size, num_pages=20, start_migration_id=mig_id,
+            client, page_size=args.page_size, num_pages=20, migration_ids=mig_ids,
         )
 
     # Phase 5
