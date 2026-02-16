@@ -36,13 +36,31 @@ def parse_folder_date(blob_name: str):
     return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
 
 
-def parse_effective_at(value: str):
-    """Parse effective_at string like '2024-12-12 12:37:59.259000 UTC' to (year, month, day)."""
-    # Strip trailing " UTC" and parse
-    clean = value.strip()
+def parse_effective_at(value):
+    """Parse effective_at to (year, month, day).
+
+    Handles:
+      - datetime / Timestamp objects (from pyarrow)
+      - ISO 8601 strings like '2024-06-24T23:59:52.172Z'
+      - BigQuery-style strings like '2024-12-12 12:37:59.259000 UTC'
+    """
+    # If pyarrow already decoded it to a datetime-like object, use it directly
+    if hasattr(value, "year") and hasattr(value, "month") and hasattr(value, "day"):
+        return (value.year, value.month, value.day)
+
+    # Otherwise treat as string
+    clean = str(value).strip()
+
+    # Strip timezone suffixes
+    if clean.endswith("Z"):
+        clean = clean[:-1]
     if clean.endswith(" UTC"):
         clean = clean[:-4]
-    # Handle variable microsecond precision
+
+    # Normalise ISO separator
+    clean = clean.replace("T", " ")
+
+    # Handle variable precision
     for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
         try:
             dt = datetime.strptime(clean, fmt)
@@ -107,7 +125,7 @@ def verify_bucket(bucket_name: str, prefix: str, start_month: int = 6, start_day
                         errors.append((blob.name, "NULL effective_at"))
                         continue
 
-                    row_date = parse_effective_at(str(s))
+                    row_date = parse_effective_at(s)
                     if row_date is None:
                         errors.append((blob.name, f"Unparseable: {s}"))
                         continue
