@@ -110,9 +110,9 @@ class DataIngestionPipeline:
             consecutive_failures = 0
 
             for page_num in range(self.config.max_pages_per_run):
-                events_response = self._fetch_events(current_migration_id, current_recorded_at)
+                updates_response = self._fetch_updates(current_migration_id, current_recorded_at)
 
-                if not events_response:
+                if not updates_response:
                     consecutive_failures += 1
                     if consecutive_failures >= self.config.max_consecutive_failures:
                         error_msg = (
@@ -129,16 +129,14 @@ class DataIngestionPipeline:
                 # Reset failure counter on success
                 consecutive_failures = 0
 
-                # /v0/events returns {"events": [{"update": {...}}, ...]}
-                raw_events = events_response.get('events', [])
-                if not raw_events:
+                # /v2/updates returns {"updates": [...]} (flat list, no wrapper)
+                updates = updates_response.get('updates', [])
+                if not updates:
                     break
 
                 stats.pages_fetched += 1
-                stats.events_fetched += len(raw_events)
+                stats.events_fetched += len(updates)
 
-                # Extract the 'update' object from each event wrapper
-                updates = [e.get('update', e) for e in raw_events]
                 events_to_insert = self._extract_events_from_updates(updates)
                 total_events_buffer.extend(events_to_insert)
 
@@ -154,7 +152,7 @@ class DataIngestionPipeline:
                     current_migration_id = last_update.get('migration_id', current_migration_id)
                     current_recorded_at = last_update.get('record_time', current_recorded_at)
 
-                if len(raw_events) < self.config.page_size:
+                if len(updates) < self.config.page_size:
                     break
 
                 if self.config.api_delay_seconds > 0:
@@ -195,24 +193,24 @@ class DataIngestionPipeline:
 
         return stats
 
-    def _fetch_events(
+    def _fetch_updates(
         self,
         after_migration_id: Optional[int],
         after_recorded_at: Optional[str]
     ) -> Optional[Dict[str, Any]]:
-        """Fetch events from the /v0/events endpoint."""
+        """Fetch updates from the /v2/updates endpoint."""
         try:
-            logger.info(f"Fetching events from API: migration_id={after_migration_id}, recorded_at={after_recorded_at}")
-            result = self.scan_client.get_events(
+            logger.info(f"Fetching updates from API: migration_id={after_migration_id}, recorded_at={after_recorded_at}")
+            result = self.scan_client.get_updates(
                 after_migration_id=after_migration_id,
                 after_record_time=after_recorded_at,
                 page_size=self.config.page_size
             )
-            events_count = len(result.get('events', [])) if result else 0
-            logger.info(f"API returned {events_count} events")
+            updates_count = len(result.get('updates', [])) if result else 0
+            logger.info(f"API returned {updates_count} updates")
             return result
         except Exception as e:
-            logger.error(f"Error fetching events: {e}")
+            logger.error(f"Error fetching updates: {e}")
             return None
 
     def _to_nested_array(self, items: List[str]) -> Dict[str, List[Dict[str, str]]]:
