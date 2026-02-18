@@ -625,7 +625,9 @@ def phase2_transaction_coverage(
             if not items:
                 break
             for item in items:
-                update = item["update"]
+                update = item.get("update")
+                if not update:
+                    continue
                 uid = update.get("update_id")
                 if uid and uid not in e_data:
                     e_ids_ordered.append(uid)
@@ -958,7 +960,9 @@ def phase4_template_choice_coverage(
                 break
             print(f"    Migration {mig_id}, page {p+1}: {len(items)} events", flush=True)
             for item in items:
-                update = item["update"]
+                update = item.get("update")
+                if not update:
+                    continue
                 if update.get("migration_id") != mig_id:
                     break
                 for eid, evt in update.get("events_by_id", {}).items():
