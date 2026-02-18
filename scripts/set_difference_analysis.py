@@ -56,16 +56,21 @@ def sub_banner(text: str):
 #  Exhaustive ID Collection
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def collect_all_update_ids(client, migration_id, page_size=500, max_pages=1000,
-                           source="updates"):
+def collect_all_ids(client, migration_id, page_size=500, max_pages=1000,
+                    source="updates"):
     """
     Paginate exhaustively through one endpoint for a single migration_id.
+    Collects BOTH update_ids AND event_ids (from inside events_by_id).
+
     Returns:
-      - ordered list of (update_id, record_time, migration_id) tuples
+      - ordered list of update records with embedded event_ids
       - total pages fetched
     """
     results = []
-    seen = set()
+    seen_updates = set()
+    all_event_ids = set()
+    # Map: update_id → set of event_ids it contains
+    events_per_update = {}
     cursor_rt = "2000-01-01T00:00:00Z"
 
     for page_num in range(max_pages):
@@ -121,16 +126,24 @@ def collect_all_update_ids(client, migration_id, page_size=500, max_pages=1000,
             item_mig = item.get("migration_id")
             if item_mig is not None and item_mig != migration_id:
                 # We've crossed into the next migration, stop
-                return results, page_num + 1
+                return results, events_per_update, all_event_ids, page_num + 1
 
             uid = item.get("update_id")
             rt = item.get("record_time")
-            if uid and uid not in seen:
-                seen.add(uid)
+
+            # Collect event_ids from events_by_id
+            ebi = item.get("events_by_id", {})
+            event_ids_in_update = set(ebi.keys())
+            all_event_ids.update(event_ids_in_update)
+
+            if uid and uid not in seen_updates:
+                seen_updates.add(uid)
+                events_per_update[uid] = event_ids_in_update
                 results.append({
                     "update_id": uid,
                     "record_time": rt,
                     "migration_id": migration_id,
+                    "event_count": len(event_ids_in_update),
                     "_null_update": item.get("_null_update", False),
                 })
 
@@ -145,13 +158,13 @@ def collect_all_update_ids(client, migration_id, page_size=500, max_pages=1000,
         cursor_rt = after.get("after_record_time")
 
         if (page_num + 1) % 10 == 0:
-            print(f"    ... page {page_num + 1}, {len(results)} unique IDs, "
-                  f"at {cursor_rt}", flush=True)
+            print(f"    ... page {page_num + 1}, {len(results)} unique updates, "
+                  f"{len(all_event_ids)} events, at {cursor_rt}", flush=True)
 
         if len(items) < page_size:
             break
 
-    return results, page_num + 1 if items else page_num
+    return results, events_per_update, all_event_ids, page_num + 1 if items else page_num
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -159,48 +172,92 @@ def collect_all_update_ids(client, migration_id, page_size=500, max_pages=1000,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def compare_migration(client, migration_id, page_size=500, max_pages=1000):
-    """Compare the full set of update_ids for one migration between both endpoints."""
+    """Compare the full set of update_ids AND event_ids for one migration between both endpoints."""
     sub_banner(f"Migration {migration_id}")
 
-    # Collect from /v2/updates
+    # Collect from /v2/updates (update_ids + event_ids)
     print(f"  Collecting from /v2/updates...", flush=True)
-    u_items, u_pages = collect_all_update_ids(
+    u_items, u_events_per_update, u_all_events, u_pages = collect_all_ids(
         client, migration_id, page_size, max_pages, source="updates")
     u_ids = {item["update_id"] for item in u_items}
-    print(f"    → {len(u_ids)} unique update_ids in {u_pages} pages")
+    u_total_events = sum(item["event_count"] for item in u_items)
+    print(f"    → {len(u_ids)} unique update_ids, {len(u_all_events)} unique event_ids in {u_pages} pages")
     if u_items:
         print(f"    → Time range: {u_items[0]['record_time']} .. {u_items[-1]['record_time']}")
 
-    # Collect from /v0/events
+    # Collect from /v0/events (update_ids + event_ids)
     print(f"  Collecting from /v0/events...", flush=True)
-    e_items, e_pages = collect_all_update_ids(
+    e_items, e_events_per_update, e_all_events, e_pages = collect_all_ids(
         client, migration_id, page_size, max_pages, source="events")
     e_ids = {item["update_id"] for item in e_items}
+    e_total_events = sum(item["event_count"] for item in e_items)
     null_updates = [item for item in e_items if item.get("_null_update")]
-    print(f"    → {len(e_ids)} unique update_ids in {e_pages} pages")
+    print(f"    → {len(e_ids)} unique update_ids, {len(e_all_events)} unique event_ids in {e_pages} pages")
     if e_items:
         print(f"    → Time range: {e_items[0]['record_time']} .. {e_items[-1]['record_time']}")
     if null_updates:
         print(f"    → ⚠ {len(null_updates)} events with NULL update body!")
 
-    # Set comparison
+    # ── Update-level set comparison ──
     only_in_updates = u_ids - e_ids
     only_in_events = e_ids - u_ids
     in_both = u_ids & e_ids
 
-    print(f"\n  Set Comparison:")
+    print(f"\n  Update-Level Set Comparison:")
     print(f"    In both:           {len(in_both)}")
     print(f"    Only in /v2/upd:   {len(only_in_updates)}")
     print(f"    Only in /v0/evt:   {len(only_in_events)}")
 
-    # Ordering comparison (for IDs in both)
+    # Ordering comparison (for update_ids in both)
     u_order = [item["update_id"] for item in u_items if item["update_id"] in in_both]
     e_order = [item["update_id"] for item in e_items if item["update_id"] in in_both]
     ordering_match = u_order == e_order
     print(f"    Ordering match:    {ordering_match}")
 
+    # ── Event-level set comparison ──
+    events_only_in_updates = u_all_events - e_all_events
+    events_only_in_events = e_all_events - u_all_events
+    events_in_both = u_all_events & e_all_events
+
+    print(f"\n  Event-Level Set Comparison (individual event_ids inside events_by_id):")
+    print(f"    Total event_ids in /v2/updates: {len(u_all_events)}")
+    print(f"    Total event_ids in /v0/events:  {len(e_all_events)}")
+    print(f"    In both:           {len(events_in_both)}")
+    print(f"    Only in /v2/upd:   {len(events_only_in_updates)}")
+    print(f"    Only in /v0/evt:   {len(events_only_in_events)}")
+
+    # ── Per-update event_id comparison ──
+    # For updates that exist in both, check if they contain the same event_ids
+    event_mismatch_updates = []
+    for uid in in_both:
+        u_eids = u_events_per_update.get(uid, set())
+        e_eids = e_events_per_update.get(uid, set())
+        if u_eids != e_eids:
+            event_mismatch_updates.append({
+                "update_id": uid,
+                "only_in_updates": sorted(u_eids - e_eids),
+                "only_in_events": sorted(e_eids - u_eids),
+                "updates_count": len(u_eids),
+                "events_count": len(e_eids),
+            })
+
+    print(f"\n  Per-Update Event Consistency (for {len(in_both)} shared updates):")
+    print(f"    Updates with matching event_ids:    {len(in_both) - len(event_mismatch_updates)}")
+    print(f"    Updates with mismatched event_ids:  {len(event_mismatch_updates)}")
+    if event_mismatch_updates:
+        print(f"    ⚠ EVENT MISMATCHES FOUND:")
+        for mm in event_mismatch_updates[:5]:
+            print(f"      Update {mm['update_id'][:40]}...")
+            print(f"        /v2/updates has {mm['updates_count']} events, "
+                  f"/v0/events has {mm['events_count']} events")
+            if mm["only_in_updates"]:
+                print(f"        Event_ids only in updates: {mm['only_in_updates'][:3]}")
+            if mm["only_in_events"]:
+                print(f"        Event_ids only in events: {mm['only_in_events'][:3]}")
+
     result = {
         "migration_id": migration_id,
+        # Update-level
         "updates_count": len(u_ids),
         "events_count": len(e_ids),
         "in_both": len(in_both),
@@ -218,10 +275,21 @@ def compare_migration(client, migration_id, page_size=500, max_pages=1000):
             e_items[0]["record_time"] if e_items else None,
             e_items[-1]["record_time"] if e_items else None,
         ),
+        # Event-level
+        "total_event_ids_updates": len(u_all_events),
+        "total_event_ids_events": len(e_all_events),
+        "event_ids_in_both": len(events_in_both),
+        "event_ids_only_in_updates": len(events_only_in_updates),
+        "event_ids_only_in_events": len(events_only_in_events),
+        "event_mismatch_updates_count": len(event_mismatch_updates),
+        "event_mismatch_examples": event_mismatch_updates[:10],
+        # For investigation
         "only_in_updates_ids": [],
         "only_in_events_ids": [],
         "only_in_updates_details": [],
         "only_in_events_details": [],
+        "events_only_in_updates_ids": sorted(events_only_in_updates)[:20],
+        "events_only_in_events_ids": sorted(events_only_in_events)[:20],
     }
 
     # Investigate any differences
@@ -424,6 +492,7 @@ def check_migration_boundaries(client, migration_ids):
 def print_summary(migration_results, boundary_results):
     banner("OVERALL SUMMARY")
 
+    # ── Update-level totals ──
     total_u = sum(r["updates_count"] for r in migration_results)
     total_e = sum(r["events_count"] for r in migration_results)
     total_both = sum(r["in_both"] for r in migration_results)
@@ -431,7 +500,7 @@ def print_summary(migration_results, boundary_results):
     total_only_e = sum(r["only_in_events"] for r in migration_results)
     total_null = sum(r["null_update_events"] for r in migration_results)
 
-    print(f"\n  Total unique update_ids:")
+    print(f"\n  UPDATE-LEVEL (update_id) TOTALS:")
     print(f"    /v2/updates:  {total_u}")
     print(f"    /v0/events:   {total_e}")
     print(f"    In both:      {total_both}")
@@ -439,7 +508,7 @@ def print_summary(migration_results, boundary_results):
     print(f"    Only events:  {total_only_e}")
     print(f"    Null-body:    {total_null}")
 
-    print(f"\n  Per migration:")
+    print(f"\n  Per migration (update_ids):")
     print(f"  {'Mig':>4} {'Updates':>8} {'Events':>8} {'Both':>8} {'Only U':>8} {'Only E':>8} {'Order':>6}")
     print(f"  {'─'*4} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*8} {'─'*6}")
     for r in migration_results:
@@ -447,25 +516,68 @@ def print_summary(migration_results, boundary_results):
         print(f"  {r['migration_id']:>4} {r['updates_count']:>8} {r['events_count']:>8} "
               f"{r['in_both']:>8} {r['only_in_updates']:>8} {r['only_in_events']:>8} {order:>6}")
 
-    if total_only_u == 0 and total_only_e == 0:
-        print(f"\n  ✓ CONCLUSION: Both endpoints return the EXACT SAME SET of transactions")
-        print(f"    across all {len(migration_results)} migrations ({total_both} total).")
+    # ── Event-level totals ──
+    total_evt_u = sum(r.get("total_event_ids_updates", 0) for r in migration_results)
+    total_evt_e = sum(r.get("total_event_ids_events", 0) for r in migration_results)
+    total_evt_both = sum(r.get("event_ids_in_both", 0) for r in migration_results)
+    total_evt_only_u = sum(r.get("event_ids_only_in_updates", 0) for r in migration_results)
+    total_evt_only_e = sum(r.get("event_ids_only_in_events", 0) for r in migration_results)
+    total_evt_mismatch = sum(r.get("event_mismatch_updates_count", 0) for r in migration_results)
+
+    print(f"\n  EVENT-LEVEL (event_id inside events_by_id) TOTALS:")
+    print(f"    /v2/updates:  {total_evt_u}")
+    print(f"    /v0/events:   {total_evt_e}")
+    print(f"    In both:      {total_evt_both}")
+    print(f"    Only updates: {total_evt_only_u}")
+    print(f"    Only events:  {total_evt_only_e}")
+
+    print(f"\n  Per migration (event_ids):")
+    print(f"  {'Mig':>4} {'Upd Evts':>9} {'Evt Evts':>9} {'Both':>8} {'Only U':>8} {'Only E':>8} {'Mismatch':>9}")
+    print(f"  {'─'*4} {'─'*9} {'─'*9} {'─'*8} {'─'*8} {'─'*8} {'─'*9}")
+    for r in migration_results:
+        print(f"  {r['migration_id']:>4} "
+              f"{r.get('total_event_ids_updates', 0):>9} "
+              f"{r.get('total_event_ids_events', 0):>9} "
+              f"{r.get('event_ids_in_both', 0):>8} "
+              f"{r.get('event_ids_only_in_updates', 0):>8} "
+              f"{r.get('event_ids_only_in_events', 0):>8} "
+              f"{r.get('event_mismatch_updates_count', 0):>9}")
+
+    # ── Conclusions ──
+    all_updates_match = total_only_u == 0 and total_only_e == 0
+    all_events_match = total_evt_only_u == 0 and total_evt_only_e == 0
+    no_mismatches = total_evt_mismatch == 0
+
+    if all_updates_match and all_events_match and no_mismatches:
+        print(f"\n  ✓ CONCLUSION: Both endpoints return the EXACT SAME SET of")
+        print(f"    update_ids ({total_both}) AND event_ids ({total_evt_both})")
+        print(f"    across all {len(migration_results)} migrations. No differences at any level.")
     else:
-        print(f"\n  ⚠ CONCLUSION: SET DIFFERENCES EXIST!")
-        if total_only_u > 0:
-            print(f"    {total_only_u} transactions exist ONLY in /v2/updates")
-            # Collect details
+        print(f"\n  ⚠ CONCLUSION: DIFFERENCES EXIST!")
+        if not all_updates_match:
+            if total_only_u > 0:
+                print(f"    {total_only_u} update_ids exist ONLY in /v2/updates")
+                for r in migration_results:
+                    for d in r.get("only_in_updates_details", []):
+                        utype = d.get("update_type", "?")
+                        print(f"      Migration {r['migration_id']}: "
+                              f"{d['update_id'][:40]}... ({utype})")
+            if total_only_e > 0:
+                print(f"    {total_only_e} update_ids exist ONLY in /v0/events")
+                for r in migration_results:
+                    for d in r.get("only_in_events_details", []):
+                        print(f"      Migration {r['migration_id']}: "
+                              f"{d['update_id'][:40]}...")
+        if not all_events_match:
+            print(f"    {total_evt_only_u} event_ids exist ONLY in /v2/updates")
+            print(f"    {total_evt_only_e} event_ids exist ONLY in /v0/events")
+        if not no_mismatches:
+            print(f"    {total_evt_mismatch} updates contain DIFFERENT event_ids between endpoints")
             for r in migration_results:
-                for d in r.get("only_in_updates_details", []):
-                    utype = d.get("update_type", "?")
-                    print(f"      Migration {r['migration_id']}: "
-                          f"{d['update_id'][:40]}... ({utype})")
-        if total_only_e > 0:
-            print(f"    {total_only_e} transactions exist ONLY in /v0/events")
-            for r in migration_results:
-                for d in r.get("only_in_events_details", []):
-                    print(f"      Migration {r['migration_id']}: "
-                          f"{d['update_id'][:40]}...")
+                for mm in r.get("event_mismatch_examples", []):
+                    print(f"      Migration {r['migration_id']}: {mm['update_id'][:40]}...")
+                    print(f"        updates: {mm['updates_count']} events, "
+                          f"events: {mm['events_count']} events")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
