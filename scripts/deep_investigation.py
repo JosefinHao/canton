@@ -227,11 +227,19 @@ def _count_all(client, migration_id, page_size, max_pages, source):
             total_updates += 1
 
         after = resp.get("after")
+
+        if page_num == 0:
+            print(f"    [debug] page 1: {len(items)} items, "
+                  f"after={'present' if after else 'ABSENT'}"
+                  f"{' mig=' + str(after.get('after_migration_id')) + ' rt=' + str(after.get('after_record_time')) if after else ''}")
+
         if not after:
             break
 
         next_mig = after.get("after_migration_id")
         if next_mig != migration_id:
+            if page_num == 0:
+                print(f"    [debug] cursor migration {next_mig} != {migration_id}, stopping")
             break
 
         cursor_rt = after.get("after_record_time")
@@ -239,11 +247,6 @@ def _count_all(client, migration_id, page_size, max_pages, source):
         if (page_num + 1) % 50 == 0:
             print(f"    ... page {page_num + 1}: {total_updates} updates, "
                   f"{total_events} events at {cursor_rt}", flush=True)
-
-        if page_num == 0:
-            print(f"    [debug] page 1 returned {len(items)} items, "
-                  f"after cursor: mig={after.get('after_migration_id')}, "
-                  f"rt={after.get('after_record_time')}")
 
         if len(items) < page_size:
             break
