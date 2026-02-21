@@ -162,11 +162,17 @@ def phase1_full_counts(client, migrations, max_pages=5000, page_size=500):
 
 
 def _count_all(client, migration_id, page_size, max_pages, source):
-    """Count all updates and events for one migration from one endpoint."""
+    """Count all updates and events for one migration from one endpoint.
+
+    Pagination follows the same approach as the data ingestion pipeline:
+    advance cursor using record_time from the last item on each page,
+    NOT the 'after' field (which the API doesn't return).
+    """
     total_updates = 0
     total_events = 0
     extra_count = 0  # reassignments for updates, null-body for events
     cursor_rt = "2000-01-01T00:00:00Z"
+    cursor_mig = migration_id
     first_rt = None
     last_rt = None
 
@@ -174,14 +180,14 @@ def _count_all(client, migration_id, page_size, max_pages, source):
         try:
             if source == "updates":
                 resp = client.get_updates(
-                    after_migration_id=migration_id,
+                    after_migration_id=cursor_mig,
                     after_record_time=cursor_rt,
                     page_size=page_size,
                 )
                 items = resp.get("updates", resp.get("transactions", []))
             else:
                 resp = client.get_events(
-                    after_migration_id=migration_id,
+                    after_migration_id=cursor_mig,
                     after_record_time=cursor_rt,
                     page_size=page_size,
                 )
@@ -195,6 +201,10 @@ def _count_all(client, migration_id, page_size, max_pages, source):
         if not items:
             break
 
+        # Track the last item for cursor advancement
+        last_item_rt = None
+        last_item_mig = None
+
         for item in items:
             if source == "events":
                 wrapper = item
@@ -202,6 +212,11 @@ def _count_all(client, migration_id, page_size, max_pages, source):
                 if not update:
                     extra_count += 1
                     total_updates += 1
+                    # For null-body events, try to get record_time from verdict
+                    verdict = wrapper.get("verdict", {})
+                    if isinstance(verdict, dict) and verdict.get("record_time"):
+                        last_item_rt = verdict["record_time"]
+                        last_item_mig = verdict.get("migration_id", migration_id)
                     continue
                 item = update
 
@@ -214,6 +229,8 @@ def _count_all(client, migration_id, page_size, max_pages, source):
                 if first_rt is None:
                     first_rt = rt
                 last_rt = rt
+                last_item_rt = rt
+                last_item_mig = item_mig
 
             # Count events inside events_by_id
             ebi = item.get("events_by_id", {})
@@ -226,28 +243,17 @@ def _count_all(client, migration_id, page_size, max_pages, source):
 
             total_updates += 1
 
-        after = resp.get("after")
-
-        if page_num == 0:
-            print(f"    [debug] page 1: {len(items)} items, "
-                  f"after={'present' if after else 'ABSENT'}"
-                  f"{' mig=' + str(after.get('after_migration_id')) + ' rt=' + str(after.get('after_record_time')) if after else ''}")
-
-        if not after:
-            break
-
-        next_mig = after.get("after_migration_id")
-        if next_mig != migration_id:
-            if page_num == 0:
-                print(f"    [debug] cursor migration {next_mig} != {migration_id}, stopping")
-            break
-
-        cursor_rt = after.get("after_record_time")
+        # Advance cursor using last item's record_time (pipeline approach)
+        if last_item_rt:
+            cursor_rt = last_item_rt
+        if last_item_mig is not None:
+            cursor_mig = last_item_mig
 
         if (page_num + 1) % 50 == 0:
             print(f"    ... page {page_num + 1}: {total_updates} updates, "
                   f"{total_events} events at {cursor_rt}", flush=True)
 
+        # Stop if fewer items than page_size (no more data)
         if len(items) < page_size:
             break
 

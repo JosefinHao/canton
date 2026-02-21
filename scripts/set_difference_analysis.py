@@ -147,15 +147,12 @@ def collect_all_ids(client, migration_id, page_size=500, max_pages=1000,
                     "_null_update": item.get("_null_update", False),
                 })
 
-        after = resp.get("after")
-        if not after:
-            break
-
-        next_mig = after.get("after_migration_id")
-        if next_mig != migration_id:
-            break
-
-        cursor_rt = after.get("after_record_time")
+        # Advance cursor using last item's record_time (pipeline approach).
+        # The API does NOT return an 'after' cursor field.
+        last_item = items[-1]
+        last_rt = last_item.get("record_time")
+        if last_rt:
+            cursor_rt = last_rt
 
         if (page_num + 1) % 10 == 0:
             print(f"    ... page {page_num + 1}, {len(results)} unique updates, "
@@ -430,10 +427,17 @@ def check_migration_boundaries(client, migration_ids):
             if mig_items:
                 last_items_u = mig_items[-10:]  # Keep last 10
 
-            after = resp.get("after")
-            if not after or after.get("after_migration_id") != mig_a:
+            # Check if we've crossed into next migration
+            if any(t.get("migration_id") != mig_a for t in items):
                 break
-            cursor_rt = after.get("after_record_time")
+
+            # Advance cursor using last item's record_time (pipeline approach)
+            last_rt = items[-1].get("record_time")
+            if last_rt:
+                cursor_rt = last_rt
+
+            if len(items) < 500:
+                break
 
         if not last_items_u:
             print(f"    No data at end of migration {mig_a}")
