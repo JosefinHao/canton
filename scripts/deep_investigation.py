@@ -240,10 +240,16 @@ def _count_all(client, migration_id, page_size, max_pages, source):
             print(f"    ... page {page_num + 1}: {total_updates} updates, "
                   f"{total_events} events at {cursor_rt}", flush=True)
 
+        if page_num == 0:
+            print(f"    [debug] page 1 returned {len(items)} items, "
+                  f"after cursor: mig={after.get('after_migration_id')}, "
+                  f"rt={after.get('after_record_time')}")
+
         if len(items) < page_size:
             break
 
-    return total_updates, total_events, page_num + 1, (first_rt, last_rt), extra_count
+    pages_done = page_num + 1 if 'page_num' in dir() else 0
+    return total_updates, total_events, pages_done, (first_rt, last_rt), extra_count
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -485,47 +491,67 @@ def phase3_verdict_deep_dive(client, migrations, page_size=500, max_null_to_fetc
             full = client.get_event_by_id(uid)
             time.sleep(REQUEST_DELAY)
 
+            # Handle non-dict responses (API may return string for some IDs)
+            if not isinstance(full, dict):
+                print(f"  [{i+1}] {uid[:40]}... → non-dict response: {type(full).__name__} = {str(full)[:100]}")
+                fetched_details.append({
+                    "update_id": uid, "response_type": type(full).__name__,
+                    "has_update": False, "has_verdict": False, "event_count": 0,
+                })
+                continue
+
+            upd_raw = full.get("update")
+            vrd_raw = full.get("verdict")
+
             detail = {
                 "update_id": uid,
                 "response_keys": sorted(full.keys()),
-                "has_update": bool(full.get("update")),
-                "has_verdict": bool(full.get("verdict")),
+                "has_update": isinstance(upd_raw, dict) and bool(upd_raw),
+                "has_verdict": isinstance(vrd_raw, dict) and bool(vrd_raw),
+                "update_type": type(upd_raw).__name__,
+                "verdict_type": type(vrd_raw).__name__,
             }
 
-            if full.get("update"):
-                upd = full["update"]
-                detail["update_keys"] = sorted(upd.keys())
-                ebi = upd.get("events_by_id", {})
-                detail["event_count"] = len(ebi)
+            if isinstance(upd_raw, dict) and upd_raw:
+                detail["update_keys"] = sorted(upd_raw.keys())
+                ebi = upd_raw.get("events_by_id", {})
+                detail["event_count"] = len(ebi) if isinstance(ebi, dict) else 0
                 templates = set()
-                for evt in ebi.values():
-                    tid = evt.get("template_id", "")
-                    templates.add(tid)
+                if isinstance(ebi, dict):
+                    for evt in ebi.values():
+                        if isinstance(evt, dict):
+                            tid = evt.get("template_id", "")
+                            templates.add(tid)
                 detail["templates"] = sorted(templates)
             else:
                 detail["update_keys"] = None
                 detail["event_count"] = 0
+                if upd_raw is not None:
+                    detail["update_raw_preview"] = str(upd_raw)[:200]
 
-            if full.get("verdict"):
-                vrd = full["verdict"]
-                detail["verdict_keys"] = sorted(vrd.keys())
-                detail["verdict_result"] = vrd.get("verdict_result")
-                # Check transaction_views for informees
-                tv = vrd.get("transaction_views", [])
-                detail["transaction_view_count"] = len(tv)
-                if tv:
+            if isinstance(vrd_raw, dict) and vrd_raw:
+                detail["verdict_keys"] = sorted(vrd_raw.keys())
+                detail["verdict_result"] = vrd_raw.get("verdict_result")
+                tv = vrd_raw.get("transaction_views", [])
+                detail["transaction_view_count"] = len(tv) if isinstance(tv, list) else 0
+                if isinstance(tv, list) and tv:
                     total_informees = set()
                     for view in tv:
-                        for inf in view.get("informees", []):
-                            total_informees.add(inf)
+                        if isinstance(view, dict):
+                            for inf in view.get("informees", []):
+                                total_informees.add(inf)
                     detail["unique_informees"] = len(total_informees)
                 else:
                     detail["unique_informees"] = 0
+            else:
+                if vrd_raw is not None and not isinstance(vrd_raw, dict):
+                    detail["verdict_raw_preview"] = str(vrd_raw)[:200]
 
             fetched_details.append(detail)
 
             status = "has body" if detail["has_update"] else "NO BODY"
-            print(f"  [{i+1}] {uid[:40]}... → {status}, "
+            upd_type_note = f" (update={detail['update_type']})" if not detail["has_update"] and upd_raw is not None else ""
+            print(f"  [{i+1}] {uid[:40]}... → {status}{upd_type_note}, "
                   f"verdict={detail.get('verdict_result', 'none')}, "
                   f"events={detail['event_count']}, "
                   f"views={detail.get('transaction_view_count', 0)}")
@@ -920,10 +946,12 @@ def phase6_multi_node(client, migrations, sample_size=10):
     for name, url in SV_NODES.items():
         try:
             c = SpliceScanClient(base_url=url, timeout=30)
-            # Quick health check
-            c.health_check()
-            node_clients[name] = c
-            print(f"  {name}: ✓ reachable")
+            if c.health_check():
+                node_clients[name] = c
+                print(f"  {name}: ✓ reachable")
+            else:
+                print(f"  {name}: ✗ (health check failed)")
+                c.close()
         except Exception as e:
             print(f"  {name}: ✗ ({e})")
 
