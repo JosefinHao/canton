@@ -27,7 +27,32 @@ This document describes the complete data architecture for the Canton on-chain d
                                    │  HTTPS  (IP: 34.132.24.144)
                                    │
   ═══════════════════════════════════════════════════════════════════════
-                          PRIMARY INGESTION PIPELINE
+                    PRIMARY INGESTION PIPELINE (GCS → BigQuery)
+  ═══════════════════════════════════════════════════════════════════════
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │             GCS: gs://canton-bucket/raw/updates/events/          │
+  │                         (parquet files)                          │
+  └──────────────────────────┬───────────────────────────────────────┘
+                             │
+                    External Table: raw.events_updates_external
+                             │
+  ┌──────────────────────────▼───────────────────────────────────────┐
+  │  BigQuery Scheduled Query: Canton: ingest_events_from_gcs        │
+  │  Schedule: Daily at 00:00 UTC                                    │
+  │  SQL: bigquery_scheduled/ingest_events_from_gcs.sql              │
+  │                                                                  │
+  │  Logic:                                                          │
+  │  - Scans yesterday's GCS external table partition                │
+  │  - NOT EXISTS dedup on (event_id, event_date)                    │
+  │  - Inserts only truly new rows into raw.events                   │
+  └──────────────────────────┬───────────────────────────────────────┘
+                             │
+                             ▼
+                    (same raw.events table below)
+
+  ═══════════════════════════════════════════════════════════════════════
+                  BACKUP PIPELINE (Scan API → Cloud Run)
   ═══════════════════════════════════════════════════════════════════════
 
   ┌─────────────────┐      ┌─────────────────────────────────────────┐
@@ -58,31 +83,6 @@ This document describes the complete data architecture for the Canton on-chain d
                            │
                     VPC Connector → Cloud NAT → Static IP 34.132.24.144
                     (traffic to Scan API exits via static IP for whitelisting)
-
-  ═══════════════════════════════════════════════════════════════════════
-                       SECONDARY PIPELINE (GCS Historical)
-  ═══════════════════════════════════════════════════════════════════════
-
-  ┌──────────────────────────────────────────────────────────────────┐
-  │             GCS: gs://canton-bucket/raw/updates/events/          │
-  │                    (historical parquet files)                     │
-  └──────────────────────────┬───────────────────────────────────────┘
-                             │
-                    External Table: raw.events_updates_external
-                             │
-  ┌──────────────────────────▼───────────────────────────────────────┐
-  │  BigQuery Scheduled Query: Canton: ingest_events_from_gcs        │
-  │  Schedule: Daily at 00:00 UTC                                    │
-  │  SQL: bigquery_scheduled/ingest_events_from_gcs.sql              │
-  │                                                                  │
-  │  Logic:                                                          │
-  │  - Scans yesterday's GCS external table partition                │
-  │  - NOT EXISTS dedup on (event_id, event_date)                    │
-  │  - Inserts only truly new rows into raw.events                   │
-  └──────────────────────────┬───────────────────────────────────────┘
-                             │
-                             ▼
-                    (same raw.events table below)
 
   ═══════════════════════════════════════════════════════════════════════
                            BIGQUERY DATA LAYER
@@ -188,13 +188,13 @@ This document describes the complete data architecture for the Canton on-chain d
 
 ## Data Flow Summary
 
-| Step | Source | Destination | Trigger | Frequency |
-|------|--------|-------------|---------|-----------|
-| 1. Live ingestion | Canton Scan API `/v2/updates` | `raw.events` (streaming insert) | Cloud Scheduler | Every 15 min |
-| 2. Historical load | `gs://canton-bucket/raw/updates/events/*` | `raw.events` (INSERT) | BigQuery Scheduled Query | Daily 00:00 UTC |
-| 3. Transformation | `raw.events` | `transformed.events_parsed` (INSERT) | Cloud Run (auto) + BQ Scheduled Query | Each ingest run + daily 01:00 UTC |
-| 4. Quality check | `raw.events` + `transformed.events_parsed` + Scan API | Report/alerts | Manual or cron | On demand / daily |
-| 5. Monitoring | `raw.events` + `transformed.events_parsed` + Cloud Run logs | Cloud Monitoring alerts | Cron / manual | Daily |
+| Step | Source | Destination | Trigger | Frequency | Role |
+|------|--------|-------------|---------|-----------|------|
+| 1. GCS ingest (primary) | `gs://canton-bucket/raw/updates/events/*` | `raw.events` (INSERT) | BigQuery Scheduled Query | Daily 00:00 UTC | **PRIMARY** |
+| 2. Transformation | `raw.events` | `transformed.events_parsed` (INSERT) | BQ Scheduled Query | Daily 01:00 UTC | Primary |
+| 3. Live ingest (backup) | Canton Scan API `/v2/updates` | `raw.events` (streaming insert) | Cloud Scheduler | Every 15 min | **BACKUP** |
+| 4. Quality check | `raw.events` + `transformed.events_parsed` + Scan API | Report/alerts | Manual or cron | On demand / daily | Ops |
+| 5. Monitoring | `raw.events` + `transformed.events_parsed` + Cloud Run logs | Cloud Monitoring alerts | Cron / manual | Daily | Ops |
 
 ---
 
@@ -282,9 +282,11 @@ Same columns as `raw.events` but with proper types:
 
 ### Why two ingestion pipelines?
 
-The Cloud Run pipeline covers all new live data. The GCS-based BigQuery scheduled query was necessary for the initial historical data migration (3.6B+ rows), where bulk parquet file loading is far more efficient than API polling. Both are kept active because:
-1. There may still be historical GCS files to process.
-2. The GCS pipeline provides an independent ingestion path that doesn't depend on API availability.
+The **GCS BigQuery scheduled query is the primary pipeline**: parquet files land in GCS and are bulk-loaded daily via scheduled query — reliable, cost-efficient, and independent of API availability. The initial historical migration (3.6B+ rows) was performed via this path.
+
+The **Cloud Run pipeline is the backup**: it polls the Canton Scan API every 15 minutes to provide near-real-time supplemental ingestion when GCS delivery is delayed or for catching up between daily GCS loads. It requires IP whitelisting by SV node operators and depends on API availability. Both are kept active because:
+1. The GCS pipeline provides reliable daily bulk ingestion without API dependencies.
+2. The Cloud Run pipeline ensures near-real-time data availability as a supplement and fallback.
 
 ### Why use STRING for all raw.events fields?
 
