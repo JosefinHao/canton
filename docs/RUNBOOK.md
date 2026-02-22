@@ -27,33 +27,53 @@ This runbook covers the most common failure scenarios for the Canton on-chain da
 
 ### Health Check Commands
 
+**Primary pipeline (BigQuery scheduled queries — production):**
 ```bash
-# Run pipeline health monitor
+# Run pipeline health monitor (BigQuery checks only)
 python scripts/monitor_pipeline.py
 
 # Run comprehensive data quality checks
-python scripts/data_quality_checks.py
+python scripts/data_quality_checks.py --skip-api-check
 
+# Check BigQuery scheduled query status and recent run history
+bq ls --transfer_config --transfer_location=US --project_id=governence-483517
+
+# View scheduled query runs (replace <CONFIG_ID> with ID from above)
+bq ls --transfer_run --transfer_location=US --run_attempt=LATEST \
+  /projects/governence-483517/locations/US/transferConfigs/<CONFIG_ID>
+
+# Check BQ scheduled query error logs
+gcloud logging read \
+  "resource.type=\"bigquery.googleapis.com/DataTransferConfig\" AND severity>=ERROR" \
+  --limit=20 --project=governence-483517
+
+# Check row counts for recent partitions
+bq query --use_legacy_sql=false \
+  "SELECT partition_id, total_rows FROM \`governence-483517.raw.INFORMATION_SCHEMA.PARTITIONS\`
+   WHERE table_name='events' AND partition_id NOT IN ('__NULL__','__UNPARTITIONED__')
+   ORDER BY partition_id DESC LIMIT 7"
+
+# Check external table is accessible (prerequisite for GCS ingest query)
+bq show governence-483517:raw.events_updates_external
+```
+
+**Backup pipeline (Cloud Run — only if active):**
+```bash
 # Check Cloud Run logs (last 50 entries)
 gcloud logging read \
   "resource.type=cloud_run_revision AND resource.labels.service_name=canton-data-ingestion" \
   --limit=50 --project=governence-483517 \
   --format="table(timestamp,severity,textPayload)"
 
-# Check for ERROR logs specifically
-gcloud logging read \
-  "resource.type=cloud_run_revision AND severity>=ERROR" \
-  --limit=20 --project=governence-483517
-
 # Check Cloud Scheduler job status
 gcloud scheduler jobs describe canton-data-ingestion-scheduler \
   --location=us-central1 --project=governence-483517
 
-# Manually trigger ingestion
+# Manually trigger ingestion via Cloud Scheduler
 gcloud scheduler jobs run canton-data-ingestion-scheduler \
   --location=us-central1 --project=governence-483517
 
-# Check ingestion state in BigQuery
+# Check ingestion state cursor
 bq query --use_legacy_sql=false \
   "SELECT * FROM \`governence-483517.raw.ingestion_state\` ORDER BY table_name"
 ```
@@ -287,42 +307,57 @@ bq query --use_legacy_sql=false \
 - Monitor shows `data_freshness: CRITICAL` (lag > 72h)
 - Alert email received for `Canton: Pipeline Monitor Critical`
 
-**Resolution sequence:**
+**Resolution sequence — Primary pipeline (BigQuery scheduled queries):**
 
 ```bash
-# Step 1: Confirm the lag
+# Step 1: Confirm the lag and which table is stale
 python scripts/monitor_pipeline.py
 
-# Step 2: Check if Cloud Scheduler has been running
+# Step 2: Check the BigQuery scheduled query run history
+bq ls --transfer_config --transfer_location=US --project_id=governence-483517
+
+# Step 3: View recent runs for the affected config (replace <CONFIG_ID>)
+bq ls --transfer_run --transfer_location=US --run_attempt=LATEST \
+  /projects/governence-483517/locations/US/transferConfigs/<CONFIG_ID>
+
+# Step 4: Check for scheduled query error logs
 gcloud logging read \
-  "resource.type=cloud_scheduler_job" \
-  --limit=20 --project=governence-483517 \
-  --format="table(timestamp,textPayload)"
+  "resource.type=\"bigquery.googleapis.com/DataTransferConfig\" AND severity>=ERROR" \
+  --limit=20 --project=governence-483517
 
-# Step 3: Check if the scheduler job is paused
-gcloud scheduler jobs describe canton-data-ingestion-scheduler \
-  --location=us-central1 --project=governence-483517 \
-  --format="value(state)"
+# Step 5: Verify the GCS external table has data for the expected date
+bq query --use_legacy_sql=false \
+  "SELECT DATE(year, month, day) AS partition_date, COUNT(*) AS row_count
+   FROM \`governence-483517.raw.events_updates_external\`
+   WHERE DATE(year, month, day) >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)
+   GROUP BY 1 ORDER BY 1 DESC"
 
-# Step 4: Resume if paused
-gcloud scheduler jobs resume canton-data-ingestion-scheduler \
-  --location=us-central1 --project=governence-483517
+# Step 6: If GCS data is present but query failed, manually run the ingest SQL
+#         Open BigQuery Console, paste bigquery_scheduled/ingest_events_from_gcs.sql and run
+#         Then paste bigquery_scheduled/transform_events.sql and run
 
-# Step 5: Manually trigger immediate ingestion run
-gcloud scheduler jobs run canton-data-ingestion-scheduler \
-  --location=us-central1 --project=governence-483517
-
-# Step 6: Monitor logs to confirm recovery
-gcloud logging read \
-  "resource.type=cloud_run_revision AND resource.labels.service_name=canton-data-ingestion" \
-  --limit=30 --project=governence-483517 --freshness=10m \
-  --format="table(timestamp,severity,textPayload)"
+# Step 7: Re-enable the scheduled query if it was disabled
+#         BigQuery Console -> Scheduled queries -> Find "Canton: ingest_events_from_gcs" -> Enable
 ```
 
-**After recovery:** Verify the state table is updated and both raw and parsed tables have recent partitions:
+**If GCS data is not arriving** (no new files in `gs://canton-bucket/raw/updates/events/`):
+```bash
+# Check what partitions exist in GCS external table
+bq query --use_legacy_sql=false \
+  "SELECT DATE(year, month, day) AS d, COUNT(*) AS rows
+   FROM \`governence-483517.raw.events_updates_external\`
+   GROUP BY 1 ORDER BY 1 DESC LIMIT 10"
+
+# If GCS files are absent, investigate the upstream data source that writes to GCS.
+# As a temporary measure, the Cloud Run backup pipeline can be activated manually:
+gcloud scheduler jobs run canton-data-ingestion-scheduler \
+  --location=us-central1 --project=governence-483517
+```
+
+**After recovery:** Verify both raw and parsed tables have recent partitions:
 ```bash
 python scripts/monitor_pipeline.py
-python scripts/data_quality_checks.py --days 3
+python scripts/data_quality_checks.py --days 3 --skip-api-check
 ```
 
 ---
@@ -559,7 +594,7 @@ bq show governence-483517:raw.events_updates_external
   ```
 - **If scheduled query is disabled:** Re-enable in BigQuery Console → Scheduled queries → Select query → Enable.
 - **If query failed due to SQL error:** Check the error message in the run history, fix the SQL in the corresponding file, and re-create the scheduled query with `setup_scheduled_query.sh`.
-- **If no new GCS files:** The Cloud Run pipeline writes directly to BigQuery, not to GCS. The GCS-based ingestion query is only for historical bulk-loaded data. If no new GCS files are arriving, this query will have nothing to insert (which is expected behavior once historical backfill is complete).
+- **If no new GCS files:** The GCS-based ingest query (`ingest_events_from_gcs.sql`) is the **primary production pipeline**. If no new parquet files are landing in `gs://canton-bucket/raw/updates/events/`, investigate the upstream process that produces those files. As a temporary workaround, the Cloud Run backup pipeline can be activated to ingest directly from the Scan API until GCS delivery is restored.
 
 ---
 
@@ -568,14 +603,18 @@ bq show governence-483517:raw.events_updates_external
 ### Checking Pipeline Health (Daily)
 
 ```bash
-# Quick health check
+# Quick health check (BigQuery checks only — production default)
 python scripts/monitor_pipeline.py
 
 # Full data quality check (run weekly or after incidents)
-python scripts/data_quality_checks.py --days 7
+# --skip-api-check omits the Scan API schema drift check (not needed for GCS-only pipeline)
+python scripts/data_quality_checks.py --days 7 --skip-api-check
 
 # JSON output for scripting
 python scripts/monitor_pipeline.py --json | jq .overall_status
+
+# If Cloud Run backup is also active, add these flags:
+# python scripts/monitor_pipeline.py --check-state --check-api
 ```
 
 ### Manually Triggering a Pipeline Run
