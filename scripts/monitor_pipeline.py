@@ -2,17 +2,23 @@
 """
 Pipeline Health Monitor
 
-Checks data freshness, row count consistency, daily volume trends, ingestion
-state staleness, and API connectivity. Designed to run manually or via cron.
+Checks data freshness, row count consistency, and daily volume trends across
+the BigQuery tables populated by the primary GCS-based scheduled query pipeline.
+
+Optionally checks ingestion state staleness (Cloud Run backup only) and Scan API
+connectivity. These are disabled by default since the production pipeline uses only
+BigQuery scheduled queries and does not run Cloud Run.
 
 When run with --notify, CRITICAL/WARNING conditions are emitted as structured
 JSON log entries so Cloud Logging can trigger log-based metric alerts.
 
 Usage:
-    python scripts/monitor_pipeline.py               # Human-readable
-    python scripts/monitor_pipeline.py --json        # Machine-readable JSON
-    python scripts/monitor_pipeline.py --notify      # Emit alerts to Cloud Logging
-    python scripts/monitor_pipeline.py --days 14     # Extend lookback window
+    python scripts/monitor_pipeline.py                  # Human-readable
+    python scripts/monitor_pipeline.py --json           # Machine-readable JSON
+    python scripts/monitor_pipeline.py --notify         # Emit alerts to Cloud Logging
+    python scripts/monitor_pipeline.py --days 14        # Extend lookback window
+    python scripts/monitor_pipeline.py --check-state    # Also check ingestion_state (Cloud Run)
+    python scripts/monitor_pipeline.py --check-api      # Also check Scan API connectivity
 
 Exit codes:
     0 = All checks passed (OK)
@@ -335,6 +341,14 @@ def main():
         "--days", type=int, default=7,
         help="Lookback window in days for row consistency and trend checks (default: 7)"
     )
+    parser.add_argument(
+        "--check-state", action="store_true",
+        help="Also check raw.ingestion_state staleness (only relevant when Cloud Run backup is active)"
+    )
+    parser.add_argument(
+        "--check-api", action="store_true",
+        help="Also check Scan API connectivity (only relevant when Cloud Run backup is active)"
+    )
     args = parser.parse_args()
 
     client = bigquery.Client(project=PROJECT_ID)
@@ -347,9 +361,14 @@ def main():
     checks["data_freshness"] = check_data_freshness(client)
     checks["row_consistency"] = check_row_consistency(client)
     checks["table_stats"] = check_table_stats(client)
-    checks["ingestion_state"] = check_ingestion_state(client)
     checks["daily_volume_trend"] = check_daily_volume_trend(client, args.days)
-    checks["api_connectivity"] = check_api_connectivity()
+
+    # Optional checks — only relevant when Cloud Run backup pipeline is active
+    if args.check_state:
+        checks["ingestion_state"] = check_ingestion_state(client)
+    if args.check_api:
+        checks["api_connectivity"] = check_api_connectivity()
+
     checks["checked_at"] = datetime.utcnow().isoformat() + "Z"
 
     # Determine overall status (scan all nested dicts for "status" keys)
@@ -416,16 +435,17 @@ def main():
                       f"{info.get('size_gb', 0):>8.2f} GB, "
                       f"modified={info.get('last_modified', 'N/A')}")
 
-        # Ingestion State
-        print("\n--- Ingestion State ---")
-        state_info = checks["ingestion_state"]
-        if "states" in state_info:
-            for name, state in state_info["states"].items():
-                age = state.get("age_hours", "N/A")
-                stale_marker = "!" if state.get("stale") else "+"
-                print(f"  [{stale_marker}] {name:20s}: migration_id={state.get('migration_id')}, age={age}h")
-        else:
-            print(f"  Error: {state_info.get('error', 'unknown')}")
+        # Ingestion State (only when --check-state was passed)
+        if "ingestion_state" in checks:
+            print("\n--- Ingestion State (Cloud Run backup) ---")
+            state_info = checks["ingestion_state"]
+            if "states" in state_info:
+                for name, state in state_info["states"].items():
+                    age = state.get("age_hours", "N/A")
+                    stale_marker = "!" if state.get("stale") else "+"
+                    print(f"  [{stale_marker}] {name:20s}: migration_id={state.get('migration_id')}, age={age}h")
+            else:
+                print(f"  Error: {state_info.get('error', 'unknown')}")
 
         # Daily Volume Trend
         print(f"\n--- Daily Volume Trend (last {args.days} days) ---")
@@ -444,14 +464,15 @@ def main():
             for w in vt.get("warnings", []):
                 print(f"  [!] {w}")
 
-        # API Connectivity
-        print("\n--- API Connectivity ---")
-        api = checks["api_connectivity"]
-        status = api.get("status", "UNKNOWN")
-        if "response_time_s" in api:
-            print(f"  [{m(status)}] {api.get('url', '')}: {api.get('response_time_s')}s [{status}]")
-        else:
-            print(f"  [{m(status)}] {api.get('error', 'unknown')} [{status}]")
+        # API Connectivity (only when --check-api was passed)
+        if "api_connectivity" in checks:
+            print("\n--- API Connectivity (Cloud Run backup) ---")
+            api = checks["api_connectivity"]
+            status = api.get("status", "UNKNOWN")
+            if "response_time_s" in api:
+                print(f"  [{m(status)}] {api.get('url', '')}: {api.get('response_time_s')}s [{status}]")
+            else:
+                print(f"  [{m(status)}] {api.get('error', 'unknown')} [{status}]")
 
         # Overall
         print("\n" + "=" * 70)
