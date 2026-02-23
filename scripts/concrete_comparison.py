@@ -177,11 +177,16 @@ def main():
             print(f"        verdict_result:    {result}")
             print(f"        finalization_time: {finalization}")
             print(f"        submitting_parties: {submitters[:3]}{'...' if len(submitters) > 3 else ''}")
-            print(f"        transaction_views: {len(views)} views")
-            if views:
+            if isinstance(views, list):
+                print(f"        transaction_views: {len(views)} views")
                 for vi, view in enumerate(views[:2]):
-                    informees = view.get("informees", [])
-                    print(f"          view[{vi}]: {len(informees)} informees")
+                    if isinstance(view, dict):
+                        informees = view.get("informees", [])
+                        print(f"          view[{vi}]: {len(informees)} informees")
+            elif isinstance(views, dict):
+                print(f"        transaction_views: dict with keys {sorted(views.keys())}")
+            else:
+                print(f"        transaction_views: {type(views).__name__}")
             print(f"        ALL verdict keys: {sorted(v.keys())}")
         if len(only_in_events_null) > 5:
             print(f"\n    ... and {len(only_in_events_null) - 5} more")
