@@ -229,8 +229,9 @@ def main():
         print(f"{'─' * 78}")
         u_times = sorted([u.get("record_time") for u in updates if u.get("record_time")])
         e_times = sorted([
-            ev.get("update", {}).get("record_time") or ev.get("verdict", {}).get("record_time", "")
-            for ev in events_raw if (ev.get("update", {}).get("record_time") or ev.get("verdict", {}).get("record_time"))
+            rt for ev in events_raw
+            for rt in [(ev.get("update") or {}).get("record_time") or (ev.get("verdict") or {}).get("record_time")]
+            if rt
         ])
         print(f"  /v2/updates: {u_times[0]} .. {u_times[-1]}")
         print(f"  /v0/events:  {e_times[0]} .. {e_times[-1]}")
@@ -238,7 +239,7 @@ def main():
         # Count events_by_id totals
         u_total_events = sum(len(u.get("events_by_id", {})) for u in updates)
         e_total_events = sum(
-            len(ev.get("update", {}).get("events_by_id", {}))
+            len((ev.get("update") or {}).get("events_by_id", {}))
             for ev in events_raw if ev.get("update")
         )
         print(f"\n  Total events_by_id:")
