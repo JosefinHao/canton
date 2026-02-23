@@ -4,6 +4,22 @@
 
 This document describes the automated data ingestion pipeline that fetches blockchain data from the Canton Scan API and loads it into BigQuery for analysis.
 
+## Pipeline Strategy Decision (Final)
+
+The Canton data pipeline uses **two complementary pipelines**:
+
+| Pipeline | Trigger | Purpose | Status |
+|----------|---------|---------|--------|
+| **Primary: BigQuery Scheduled Query (GCS)** | Daily at 00:00 UTC | Bulk-load parquet files from GCS → `raw.events` | ✅ Active |
+| **Transformation: BigQuery Scheduled Query** | Daily at 01:00 UTC | Transform `raw.events` → `transformed.events_parsed` | ✅ Active |
+| **Backup: Cloud Run + Cloud Scheduler** | Every 15 minutes (OIDC) | Incremental live ingestion from Scan API → `raw.events` | ✅ Active (backup) |
+
+**Rationale:**
+- The **GCS scheduled query is the primary ingestion pipeline**: it bulk-loads parquet files from `gs://canton-bucket/raw/updates/events/` into `raw.events` daily, providing reliable, cost-efficient batch ingestion without API dependencies.
+- The **transformation scheduled query** runs daily at 01:00 UTC (one hour after ingest) to transform all raw events into `transformed.events_parsed`.
+- The **Cloud Run pipeline is the backup**: it provides incremental live ingestion from the Canton Scan API every 15 minutes when GCS files are not yet available or as a real-time supplement. It requires IP whitelisting by SV node operators and is subject to API availability.
+- **Both pipelines are kept active** because they serve complementary roles and the Cloud Run pipeline ensures near-real-time data if GCS delivery is delayed.
+
 ## Phase 3: Data Pipeline & Automation - Implementation Status
 
 | Step | Status | Description |
@@ -14,6 +30,9 @@ This document describes the automated data ingestion pipeline that fetches block
 | Data transformation pipeline | ✅ Done | BigQuery scheduled query transforms raw → parsed |
 | Cloud Scheduler | ✅ Done | Triggers ingestion every 15 minutes with OIDC auth |
 | IP Whitelisting | ⏳ Pending | Static IP 34.132.24.144 needs whitelisting by SV operators |
+| Data Quality Checks | ✅ Done | Comprehensive suite in `scripts/data_quality_checks.py` |
+| Monitoring and Alerting | ✅ Done | `scripts/monitor_pipeline.py` + `scripts/setup_monitoring_alerts.sh` |
+| Runbook | ✅ Done | `docs/RUNBOOK.md` — common failure scenarios and resolution steps |
 
 ---
 
@@ -306,14 +325,20 @@ The pipeline automatically tries multiple Super Validator nodes until one succee
 
 ## Data Flow
 
-1. **Cloud Scheduler** triggers the Cloud Run service every 15 minutes (with OIDC authentication)
-2. **Cloud Run** routes traffic through VPC Connector → Cloud NAT (static IP)
-3. **Cloud Run** tries SV nodes in order until one responds (10s timeout each)
-4. **Cloud Run** queries BigQuery state table for last processed position
-5. **Cloud Run** fetches new events from Scan API `/v0/events` endpoint (incremental)
-6. **Cloud Run** inserts raw events into `raw.events` table via streaming API
-7. **Cloud Run** updates `raw.ingestion_state` table with new position
-8. **BigQuery Scheduled Query** transforms raw data to `transformed.events_parsed`
+**Primary Pipeline (GCS → BigQuery):**
+1. Parquet files land in `gs://canton-bucket/raw/updates/events/`
+2. **BigQuery Scheduled Query** (`ingest_events_from_gcs`) runs daily at 00:00 UTC, reading yesterday's GCS partition via the external table `raw.events_updates_external`
+3. New events are inserted into `raw.events` with dedup on `(event_id, event_date)`
+4. **BigQuery Scheduled Query** (`transform_raw_events`) runs daily at 01:00 UTC, transforming `raw.events` → `transformed.events_parsed`
+
+**Backup Pipeline (Scan API → Cloud Run → BigQuery):**
+5. **Cloud Scheduler** triggers the Cloud Run service every 15 minutes (with OIDC authentication)
+6. **Cloud Run** routes traffic through VPC Connector → Cloud NAT (static IP `34.132.24.144`)
+7. **Cloud Run** tries SV nodes in order until one responds (10s timeout each)
+8. **Cloud Run** queries BigQuery state table for last processed position
+9. **Cloud Run** fetches new events from Scan API `/v2/updates` endpoint (incremental)
+10. **Cloud Run** inserts raw events into `raw.events` table via streaming API
+11. **Cloud Run** updates `raw.ingestion_state` table with new position
 
 ## Components
 
@@ -412,9 +437,9 @@ python scripts/run_ingestion.py --max-pages 50 --page-size 1000
 */15 * * * * cd /path/to/canton && /usr/bin/python3 scripts/run_ingestion.py >> /var/log/canton-ingestion.log 2>&1
 ```
 
-### Option 2: BigQuery Scheduled Queries (GCS-Based Pipeline) - RECOMMENDED
+### Option 2: BigQuery Scheduled Queries (GCS-Based Pipeline) - RECOMMENDED PRIMARY
 
-Two daily scheduled queries that load new events from GCS and transform them. This is the primary data pipeline.
+Two daily scheduled queries that load new events from GCS and transform them. This is the **primary ingestion pipeline**.
 
 **Query 1: `ingest_events_from_gcs`** (Daily at 00:00 UTC)
 - Reads new parquet files from `gs://canton-bucket/raw/updates/events/` via external table
@@ -434,9 +459,9 @@ Two daily scheduled queries that load new events from GCS and transform them. Th
 5. Set schedule to daily at 00:00 UTC, location: US
 6. Repeat for `bigquery_scheduled/transform_events.sql` at 01:00 UTC
 
-### Option 3: Cloud Run (Containerized) - RECOMMENDED
+### Option 3: Cloud Run (Containerized) - BACKUP PIPELINE
 
-Deploy as a containerized service on Cloud Run with VPC egress for IP whitelisting.
+Deploy as a containerized service on Cloud Run with VPC egress for IP whitelisting. This is the **backup/supplemental pipeline** that runs alongside the primary GCS-based pipeline.
 
 **Prerequisites:**
 - Cloud Run API enabled
@@ -792,10 +817,102 @@ With 96 invocations/day (every 15 min):
 - Cloud Scheduler: $0.10/month
 - BigQuery costs depend on data volume
 
+---
+
+## Data Quality Verification
+
+An automated data quality suite runs against the BigQuery tables to detect issues early.
+
+### Running Checks
+
+```bash
+# Run all checks (last 7 days)
+python scripts/data_quality_checks.py
+
+# Extended lookback
+python scripts/data_quality_checks.py --days 14
+
+# JSON output (for scripting)
+python scripts/data_quality_checks.py --json
+
+# Skip live API schema check (if no network access)
+python scripts/data_quality_checks.py --skip-api-check
+```
+
+### Checks Performed
+
+| Check | Description | Threshold |
+|-------|-------------|-----------|
+| **Row count validation** | Compares raw vs parsed row counts per partition | Warn if >5% difference |
+| **Data freshness** | Checks latest partition age in both tables | Warn >36h, Critical >72h |
+| **Timestamp consistency** | Detects future dates, null timestamps | Zero tolerance for future dates |
+| **Duplicate detection** | Finds duplicate event_ids within a partition | Zero tolerance |
+| **Null field checks** | Verifies critical fields (event_id, template_id, etc.) | Warn if >1% null |
+| **Partition continuity** | Finds missing daily partitions in sequence | Any gap = Warning |
+| **Schema drift detection** | Compares live API fields to expected schema | Any missing field = Warning |
+| **Daily volume trend** | Compares today's rows to rolling N-day average | Drop >50% or spike >300% = Warning |
+
+**Exit codes:** 0=OK, 1=Warning, 2=Critical
+
+---
+
+## Monitoring and Alerting
+
+### Health Monitor
+
+```bash
+# Human-readable output
+python scripts/monitor_pipeline.py
+
+# JSON output
+python scripts/monitor_pipeline.py --json
+
+# Emit Cloud Logging alerts (for log-based metric triggers)
+python scripts/monitor_pipeline.py --notify
+
+# Extend lookback window
+python scripts/monitor_pipeline.py --days 14
+```
+
+The monitor checks:
+- Data freshness (both raw and parsed tables)
+- Row count consistency between tables
+- Ingestion state staleness (is the cursor being updated?)
+- Daily volume trends (sudden drops or spikes)
+- Scan API connectivity
+
+When run with `--notify`, issues are emitted as structured JSON log entries at `ERROR`/`WARNING` severity. Cloud Logging captures these and triggers log-based metric alerts.
+
+### Cloud Monitoring Alert Setup
+
+```bash
+# Set up all Cloud Monitoring alerts (one-time setup)
+ALERT_EMAIL=your@email.com bash scripts/setup_monitoring_alerts.sh
+```
+
+This creates:
+- **Log-based metric**: `canton_pipeline_errors` (ERROR logs from Cloud Run)
+- **Log-based metric**: `canton_monitor_critical` (monitor issues)
+- **Alert policy**: Pipeline errors trigger email notification
+- **Alert policy**: Monitor critical/warning triggers email
+- **Uptime check**: Cloud Run health endpoint checked every 5 minutes
+
+### Cron Integration (for VM-based setups)
+
+```bash
+# Run monitor daily and emit alerts to Cloud Logging
+0 8 * * * cd /path/to/canton && python scripts/monitor_pipeline.py --notify >> /var/log/canton/monitor.log 2>&1
+
+# Run data quality checks weekly
+0 9 * * 0 cd /path/to/canton && python scripts/data_quality_checks.py --days 7 --json >> /var/log/canton/quality.log 2>&1
+```
+
+---
+
 ## Next Steps
 
-1. **Set up alerting**: Configure Cloud Monitoring alerts for failures
-2. **Add dead letter queue**: Handle persistent failures
-3. **Create analytics tables**: Build materialized views for specific use cases
-4. **Implement backfill**: Handle historical data gaps
-5. **Add data validation**: Verify data integrity checks
+1. **IP Whitelisting**: Coordinate with SV operators to whitelist `34.132.24.144` for full MainNet coverage
+2. **Historical GCS backfill**: Verify all historical parquet files are processed by the BigQuery scheduled query
+3. **Analytics tables**: Build materialized views or aggregation tables for specific use cases
+4. **Data retention policy**: Define and implement a BigQuery table expiration policy for `raw.events`
+5. **Alerting integration**: Connect Cloud Monitoring alerts to PagerDuty or Slack if needed
