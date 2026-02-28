@@ -4,6 +4,12 @@ Quick API Status Checker
 Run this to see which endpoints are accessible and working.
 """
 
+import sys
+import os
+
+# Add project root to path so src/cloud_run imports work
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from src.canton_scan_client import SpliceScanClient
 
 from cloud_run.data_ingestion.canton_scan_client import MAINNET_PRIMARY_URL, MAINNET_SV_URLS
