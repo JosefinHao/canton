@@ -661,29 +661,132 @@ def print_report(all_results: List[SampleResult]):
 
 
 def print_categorization(all_results: List[SampleResult]):
-    """Print categorized view of transaction types discovered."""
+    """Print analytics-focused categorization of on-chain events.
+
+    Business Questions This Categorization Helps Answer:
+
+    Featured App Ecosystem:
+      Q1. Which featured apps are most active? (Featured App Activity)
+      Q2. How much CC reward does each app earn? (App Rewards)
+      Q3. Is featured app usage growing over time? (Featured App Activity trend)
+      Q4. How many featured apps exist? (Featured App Rights)
+
+    Reward Economics:
+      Q5. How is minted CC distributed? (App/Validator/SV/Unclaimed Rewards)
+      Q6. What % of rewards go unclaimed / to the dev fund?
+      Q7. Are validator rewards growing? (Validator Rewards trend)
+      Q8. Faucet grants vs activity-based validator rewards?
+
+    Transaction Volume:
+      Q9.  What's the CC transfer volume trend? (AmuletRules choice breakdown)
+      Q10. What's the transaction type mix? (AmuletRules choice breakdown)
+      Q11. How much CC is spent on traffic? (Traffic Purchases)
+
+    Network Health:
+      Q12. How many active validators? (Validator Licensing)
+      Q13. Validator liveness rate? (Validator Liveness)
+      Q14. DSO governance activity? (DSO Governance)
+
+    Growth & Adoption:
+      Q15. Is network activity growing? (events/update density over time)
+      Q16. External party adoption? (External Party)
+      Q17. Name Service uptake? (Name Service)
+
+    Design: Categories are mutually exclusive by template — no event is counted
+    twice. Choice breakdowns within categories show the business operation mix.
+    """
 
     all_templates = Counter()
+    all_template_events = Counter()
     all_choices = Counter()
     for r in all_results:
         all_templates += r.template_counts
+        all_template_events += r.template_event_counts
         all_choices += r.choice_counts
 
     total_events = sum(r.events_count for r in all_results)
 
+    # ── Categories ──
+    # Organized by business domain.  Each template appears in exactly one
+    # category, so counts are mutually exclusive.  Choice breakdowns are
+    # shown within each category for finer-grained analysis.
+    #
+    # Key design decisions vs the old categorization:
+    #   1. AmuletRules:AmuletRules gets its OWN category (was in "Token Ops"
+    #      which double-counted with "CC Transfers" / "CC Minting").
+    #   2. Rewards are SPLIT by recipient (was one lumped "Rewards" bucket).
+    #   3. Featured Apps are split: Rights vs Activity vs Batched Markers.
+    #   4. Validators split: Licensing vs Liveness.
+    #   5. Governance split: DSO Governance (voting) vs SV Operations (status).
+
     CATEGORIES = {
-        "Token Operations (CC)": {
+        # ─── Token Economics ───────────────────────────────────────────────
+        "CC Coin Contracts": {
             "templates": [
                 "Splice.Amulet:Amulet",
-                "Splice.AmuletRules:AmuletRules",
                 "Splice.Amulet:LockedAmulet",
             ],
-            "desc": "Canton Coin creation, transfer, burning, locking, and rules governance",
+            "desc": "CC coin state changes — creates (minting/transfer outputs) "
+                    "and archives (consumption/burning)",
         },
+        "AmuletRules Exercises": {
+            "templates": ["Splice.AmuletRules:AmuletRules"],
+            "desc": "Top-level token operations: Transfer, Mint, BuyTraffic, "
+                    "and other AmuletRules choices",
+        },
+
+        # ─── Rewards (split by recipient for economic analysis) ────────────
+        "App Rewards": {
+            "templates": ["Splice.Amulet:AppRewardCoupon"],
+            "desc": "Reward coupons earned by featured apps for facilitating "
+                    "transactions (→ Q2, Q5)",
+        },
+        "Validator Rewards": {
+            "templates": [
+                "Splice.Amulet:ValidatorRewardCoupon",
+                "Splice.ValidatorLicense:ValidatorFaucetCoupon",
+            ],
+            "desc": "Rewards for validators — activity-based coupons + faucet "
+                    "grants (→ Q7, Q8)",
+        },
+        "SV Rewards": {
+            "templates": ["Splice.Amulet:SvRewardCoupon"],
+            "desc": "Rewards for Super Validators from DSO governance "
+                    "participation (→ Q5)",
+        },
+        "Unclaimed Rewards & Dev Fund": {
+            "templates": [
+                "Splice.Amulet:UnclaimedReward",
+                "Splice.Amulet:UnclaimedDevelopmentFundCoupon",
+            ],
+            "desc": "Minted CC not yet claimed + development fund "
+                    "allocations (→ Q6)",
+        },
+
+        # ─── Featured App Ecosystem ────────────────────────────────────────
+        "Featured App Rights": {
+            "templates": ["Splice.Amulet:FeaturedAppRight"],
+            "desc": "Featured app registration — who holds featured app "
+                    "status (→ Q4)",
+        },
+        "Featured App Activity": {
+            "templates": ["Splice.Amulet:FeaturedAppActivityMarker"],
+            "desc": "Activity markers created by featured apps — records of "
+                    "transaction facilitation (→ Q1, Q3)",
+        },
+        "Featured App Batched Markers": {
+            "templates": [
+                "Splice.Util.FeaturedApp.BatchedMarkersProxy:BatchedMarkersProxy",
+            ],
+            "desc": "Batched marker proxy for efficient multi-party featured "
+                    "app updates",
+        },
+
+        # ─── Network Infrastructure ────────────────────────────────────────
         "Traffic Purchases": {
             "templates": ["Splice.DecentralizedSynchronizer:MemberTraffic"],
-            "choices": [("Splice.AmuletRules:AmuletRules", "AmuletRules_BuyMemberTraffic")],
-            "desc": "Buying synchronizer bandwidth with CC ($17/MB)",
+            "desc": "Synchronizer bandwidth allocation contracts — "
+                    "$17/MB (→ Q11)",
         },
         "Mining Rounds": {
             "templates": [
@@ -692,33 +795,39 @@ def print_categorization(all_results: List[SampleResult]):
                 "Splice.Round:ClosedMiningRound",
                 "Splice.Round:SummarizingMiningRound",
             ],
-            "desc": "Mining round lifecycle (open -> issuing -> closed, ~10 min intervals)",
+            "desc": "Mining round lifecycle (open → issuing → closed → "
+                    "summarizing, ~10 min intervals)",
         },
-        "Rewards (Coupons)": {
-            "templates": [
-                "Splice.Amulet:AppRewardCoupon",
-                "Splice.Amulet:ValidatorRewardCoupon",
-                "Splice.ValidatorLicense:ValidatorFaucetCoupon",
-                "Splice.Amulet:SvRewardCoupon",
-                "Splice.Amulet:UnclaimedReward",
-                "Splice.Amulet:UnclaimedDevelopmentFundCoupon",
-            ],
-            "desc": "Reward coupons for validators, apps, SVs, faucets, unclaimed rewards",
-        },
-        "Validators": {
+
+        # ─── Validator Management ──────────────────────────────────────────
+        "Validator Licensing": {
             "templates": [
                 "Splice.ValidatorLicense:ValidatorLicense",
                 "Splice.Amulet:ValidatorRight",
+            ],
+            "desc": "Validator onboarding, licensing, and rights (→ Q12)",
+        },
+        "Validator Liveness": {
+            "templates": [
                 "Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
             ],
-            "desc": "Validator onboarding, licensing, and liveness tracking",
+            "desc": "Validator liveness activity tracking — heartbeat "
+                    "records (→ Q13)",
         },
-        "Governance (DSO)": {
+
+        # ─── Governance ────────────────────────────────────────────────────
+        "DSO Governance": {
             "templates": [
                 "Splice.DsoRules:VoteRequest",
                 "Splice.DsoRules:Vote",
                 "Splice.DsoRules:DsoRules",
                 "Splice.DsoRules:Confirmation",
+            ],
+            "desc": "DSO voting, rule changes, and governance "
+                    "actions (→ Q14)",
+        },
+        "SV Operations": {
+            "templates": [
                 "Splice.DSO.SvState:SvStatusReport",
                 "Splice.DSO.SvState:SvNodeState",
                 "Splice.DSO.SvState:SvRewardState",
@@ -727,33 +836,11 @@ def print_categorization(all_results: List[SampleResult]):
                 "Splice.SvOnboarding:SvOnboardingConfirmed",
                 "Splice.DsoBootstrap:DsoBootstrap",
             ],
-            "desc": "DSO governance, voting, SV status reports, and onboarding",
+            "desc": "SV status reports, node state, price voting, "
+                    "and onboarding",
         },
-        "Name Service (ANS)": {
-            "templates": [
-                "Splice.Ans:AnsEntry",
-                "Splice.AnsRules:AnsRules",
-                "Splice.Ans:AnsRules",
-                "Splice.Ans:AnsEntryContext",
-                "Splice.Ans.AmuletConversionRateFeed:AmuletConversionRateFeed",
-            ],
-            "desc": "Amulet Name Service registrations, rules, and conversion rates",
-        },
-        "CC Transfers": {
-            "choices": [("Splice.AmuletRules:AmuletRules", "AmuletRules_Transfer")],
-            "desc": "CC token transfers between parties (tiered fees)",
-        },
-        "CC Minting": {
-            "choices": [("Splice.AmuletRules:AmuletRules", "AmuletRules_Mint")],
-            "desc": "CC token minting/issuance at round close",
-        },
-        "Featured Apps": {
-            "templates": [
-                "Splice.Amulet:FeaturedAppRight",
-                "Splice.Amulet:FeaturedAppActivityMarker",
-            ],
-            "desc": "Featured app rights and activity tracking",
-        },
+
+        # ─── Transfer & External Party ─────────────────────────────────────
         "Transfer Infrastructure": {
             "templates": [
                 "Splice.AmuletRules:TransferPreapproval",
@@ -762,7 +849,8 @@ def print_categorization(all_results: List[SampleResult]):
                 "Splice.AmuletTransferInstruction:AmuletTransferInstruction",
                 "Splice.AmuletRules:ExternalPartySetupProposal",
             ],
-            "desc": "Transfer preapprovals, factories, allocations, and instructions",
+            "desc": "Transfer preapprovals, factories, allocations, "
+                    "and instructions",
         },
         "External Party": {
             "templates": [
@@ -770,7 +858,21 @@ def print_categorization(all_results: List[SampleResult]):
                 "Splice.ExternalPartyAmuletRules:TransferCommand",
                 "Splice.ExternalPartyAmuletRules:TransferCommandCounter",
             ],
-            "desc": "External party rules, transfer commands, and counters",
+            "desc": "External party CC access rules and transfer "
+                    "commands (→ Q16)",
+        },
+
+        # ─── Other ─────────────────────────────────────────────────────────
+        "Name Service (ANS)": {
+            "templates": [
+                "Splice.Ans:AnsEntry",
+                "Splice.AnsRules:AnsRules",
+                "Splice.Ans:AnsRules",
+                "Splice.Ans:AnsEntryContext",
+                "Splice.Ans.AmuletConversionRateFeed:AmuletConversionRateFeed",
+            ],
+            "desc": "Amulet Name Service — human-readable names for "
+                    "network parties (→ Q17)",
         },
         "Wallet & Subscriptions": {
             "templates": [
@@ -781,16 +883,11 @@ def print_categorization(all_results: List[SampleResult]):
             ],
             "desc": "Wallet installations and subscription management",
         },
-        "Batched Markers": {
-            "templates": [
-                "Splice.Util.FeaturedApp.BatchedMarkersProxy:BatchedMarkersProxy",
-            ],
-            "desc": "Batched marker operations for efficient multi-party updates",
-        },
     }
 
     print(f"\n{'═'*78}")
-    print("  TRANSACTION TYPE CATEGORIZATION (from samples)")
+    print("  TRANSACTION TYPE CATEGORIZATION")
+    print(f"  Analytics-focused • Mutually exclusive by template • No double-counting")
     print(f"{'═'*78}")
 
     # Build lookup helpers for matching full template IDs (with hash prefix)
@@ -803,10 +900,15 @@ def print_categorization(all_results: List[SampleResult]):
         return sum(c for tid, c in all_templates.items()
                    if template_matches(tid, bare_name))
 
-    def sum_matching_choices(bare_name: str, choice: str) -> int:
-        """Sum counts for all (template, choice) pairs matching a bare name."""
-        return sum(c for (tid, ch), c in all_choices.items()
-                   if template_matches(tid, bare_name) and ch == choice)
+    def get_matching_choices(bare_names: list) -> Counter:
+        """Get all choices exercised on templates in this category."""
+        result = Counter()
+        for (tid, ch), cnt in all_choices.items():
+            for bare in bare_names:
+                if template_matches(tid, bare):
+                    result[ch] += cnt
+                    break
+        return result
 
     def is_categorized(full_tid: str, cat_bare_names: set) -> bool:
         """Check if a full template ID matches any bare name in the set."""
@@ -817,26 +919,35 @@ def print_categorization(all_results: List[SampleResult]):
         for tid in info.get("templates", []):
             all_categorized_bare.add(tid)
 
+    category_counts = {}
     categorized_templates = set()
+
     for cat, info in CATEGORIES.items():
         cat_count = 0
         for bare_tid in info.get("templates", []):
             cat_count += sum_matching_templates(bare_tid)
-        for bare_tid, ch in info.get("choices", []):
-            cat_count += sum_matching_choices(bare_tid, ch)
+
+        category_counts[cat] = cat_count
 
         if cat_count > 0:
             pct = 100.0 * cat_count / total_events if total_events else 0
             print(f"\n  {cat}  ({cat_count:,} events, {pct:.1f}%)")
             print(f"    {info['desc']}")
+
+            # Template breakdown
             for bare_tid in info.get("templates", []):
                 c = sum_matching_templates(bare_tid)
                 if c:
                     print(f"      {bare_tid}: {c:,}")
-            for bare_tid, ch in info.get("choices", []):
-                c = sum_matching_choices(bare_tid, ch)
-                if c:
-                    print(f"      {bare_tid} [{ch}]: {c:,}")
+
+            # Choice breakdown (for exercised events in this category)
+            cat_choices = get_matching_choices(info.get("templates", []))
+            if cat_choices:
+                total_ch = sum(cat_choices.values())
+                print(f"    Top choices ({total_ch:,} exercised):")
+                for ch, cnt in cat_choices.most_common(10):
+                    ch_pct = 100.0 * cnt / total_ch if total_ch else 0
+                    print(f"      {ch}: {cnt:,} ({ch_pct:.1f}%)")
 
     # Mark all full template IDs that matched a category
     for full_tid in all_templates:
@@ -849,9 +960,95 @@ def print_categorization(all_results: List[SampleResult]):
         if tid not in categorized_templates and tid != "unknown" and c >= 2
     }
     if uncategorized:
-        print(f"\n  UNCATEGORIZED TEMPLATES:")
+        unc_total = sum(uncategorized.values())
+        unc_pct = 100.0 * unc_total / total_events if total_events else 0
+        print(f"\n  UNCATEGORIZED  ({unc_total:,} events, {unc_pct:.1f}%)")
         for tid in sorted(uncategorized, key=uncategorized.get, reverse=True):
             print(f"    {uncategorized[tid]:>8,}  {tid}")
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  BUSINESS INSIGHTS SUMMARY
+    # ══════════════════════════════════════════════════════════════════════
+
+    print(f"\n{'═'*78}")
+    print("  BUSINESS INSIGHTS SUMMARY")
+    print(f"{'═'*78}")
+
+    # ── Reward Distribution (Q5, Q6, Q7, Q8) ──
+    reward_cats = [
+        "App Rewards", "Validator Rewards", "SV Rewards",
+        "Unclaimed Rewards & Dev Fund",
+    ]
+    total_rewards = sum(category_counts.get(c, 0) for c in reward_cats)
+    if total_rewards > 0:
+        print(f"\n  Reward Distribution ({total_rewards:,} total reward events):")
+        for rc in reward_cats:
+            c = category_counts.get(rc, 0)
+            pct = 100.0 * c / total_rewards if total_rewards else 0
+            print(f"    {rc:<32s} {c:>8,}  ({pct:>5.1f}%)")
+
+        # Validator reward sub-breakdown (Q8: faucet vs activity-based)
+        val_activity = sum_matching_templates("Splice.Amulet:ValidatorRewardCoupon")
+        val_faucet = sum_matching_templates("Splice.ValidatorLicense:ValidatorFaucetCoupon")
+        if val_activity or val_faucet:
+            print(f"    Validator sub-breakdown:")
+            print(f"      Activity-based coupons:      {val_activity:>8,}")
+            print(f"      Faucet grants:               {val_faucet:>8,}")
+
+    # ── Featured App Ecosystem (Q1, Q3, Q4) ──
+    fa_cats = [
+        "Featured App Rights", "Featured App Activity",
+        "Featured App Batched Markers",
+    ]
+    total_fa = sum(category_counts.get(c, 0) for c in fa_cats)
+    if total_fa > 0:
+        print(f"\n  Featured App Ecosystem ({total_fa:,} total events):")
+        for fc in fa_cats:
+            c = category_counts.get(fc, 0)
+            if c > 0:
+                pct = 100.0 * c / total_fa if total_fa else 0
+                print(f"    {fc:<32s} {c:>8,}  ({pct:>5.1f}%)")
+        # Cross-reference with App Rewards
+        app_rew = category_counts.get("App Rewards", 0)
+        if app_rew > 0:
+            fa_activity = category_counts.get("Featured App Activity", 0)
+            print(f"    (+ App Rewards from other section:  {app_rew:>8,})")
+            if fa_activity > 0:
+                ratio = app_rew / fa_activity
+                print(f"    App Rewards / Activity Markers ratio: {ratio:.2f}")
+
+    # ── Transaction Type Mix (Q9, Q10, Q11) ──
+    ar_templates = ["Splice.AmuletRules:AmuletRules"]
+    ar_choices = get_matching_choices(ar_templates)
+    total_ar_ch = sum(ar_choices.values())
+    if total_ar_ch > 0:
+        print(f"\n  Transaction Type Mix ({total_ar_ch:,} AmuletRules exercises):")
+        key_choices = [
+            ("AmuletRules_Transfer", "CC Transfers"),
+            ("AmuletRules_Mint", "CC Minting"),
+            ("AmuletRules_BuyMemberTraffic", "Traffic Purchases"),
+        ]
+        for ch_name, label in key_choices:
+            c = ar_choices.get(ch_name, 0)
+            pct = 100.0 * c / total_ar_ch if total_ar_ch else 0
+            print(f"    {label:<32s} {c:>8,}  ({pct:>5.1f}%)")
+        other = total_ar_ch - sum(ar_choices.get(cn, 0) for cn, _ in key_choices)
+        if other > 0:
+            pct = 100.0 * other / total_ar_ch
+            print(f"    {'Other AmuletRules choices':<32s} {other:>8,}  ({pct:>5.1f}%)")
+            # Show the actual other choices
+            shown = {cn for cn, _ in key_choices}
+            other_choices = {ch: cnt for ch, cnt in ar_choices.items()
+                            if ch not in shown}
+            for ch, cnt in sorted(other_choices.items(),
+                                  key=lambda x: -x[1])[:5]:
+                print(f"      {ch}: {cnt:,}")
+
+    # ── Coverage ──
+    total_categorized = sum(category_counts.values())
+    cov_pct = 100.0 * total_categorized / total_events if total_events else 0
+    print(f"\n  Coverage: {total_categorized:,} / {total_events:,} events "
+          f"categorized ({cov_pct:.2f}%)")
 
 
 def save_json_report(all_results: List[SampleResult], output_dir: str):
