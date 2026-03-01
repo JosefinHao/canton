@@ -18,14 +18,12 @@ This script:
 
 Strategy for finding traffic purchases in 10+ TB:
   - Traffic purchases happen regularly (every party that submits transactions
-    needs bandwidth), so random sampling from each migration should find them
-  - If early pages don't contain traffic purchases, we increase the sample
-    window or use the /v0/round-party-totals endpoint to identify rounds
-    where traffic was purchased, then look at updates near those times
+    needs bandwidth), so sampling from each migration should find them
+  - We scan many pages per sample window to maximize coverage
 
 Usage (run from whitelisted VM):
     python scripts/explore_traffic_purchase.py
-    python scripts/explore_traffic_purchase.py --max-samples 20
+    python scripts/explore_traffic_purchase.py --max-samples 50
     python scripts/explore_traffic_purchase.py --output-dir scripts/output/exploration
 
 Output:
@@ -40,55 +38,111 @@ import sys
 import time
 from collections import Counter, defaultdict
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.canton_scan_client import SpliceScanClient
 
 BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
-REQUEST_DELAY = 0.3
+REQUEST_DELAY = 0.15
 
 TRAFFIC_TEMPLATE = "Splice.AmuletRules:AmuletRules"
 TRAFFIC_CHOICE = "AmuletRules_BuyMemberTraffic"
 MEMBER_TRAFFIC_TEMPLATE = "Splice.DecentralizedSynchronizer:MemberTraffic"
 
-# Wider sampling to maximize chances of finding traffic purchases
+# Wide sampling across all migrations with many time windows
 SAMPLE_WINDOWS = {
-    0: [("start", "1970-01-01T00:00:00Z")],
-    1: [("start", "1970-01-01T00:00:00Z")],
-    2: [("start", "1970-01-01T00:00:00Z")],
+    0: [
+        ("start",  "1970-01-01T00:00:00Z"),
+        ("mid",    "2024-06-25T00:00:00Z"),
+        ("late",   "2024-08-01T00:00:00Z"),
+    ],
+    1: [
+        ("start",  "1970-01-01T00:00:00Z"),
+        ("mid",    "2024-10-16T14:00:00Z"),
+        ("late",   "2024-11-01T00:00:00Z"),
+    ],
+    2: [
+        ("start",  "1970-01-01T00:00:00Z"),
+        ("mid",    "2024-12-11T15:00:00Z"),
+        ("late",   "2025-01-01T00:00:00Z"),
+    ],
     3: [
-        ("early",  "1970-01-01T00:00:00Z"),
-        ("mid-1",  "2025-06-25T14:00:00Z"),
-        ("mid-2",  "2025-06-25T15:00:00Z"),
-        ("late",   "2025-06-25T16:00:00Z"),
+        ("early",     "1970-01-01T00:00:00Z"),
+        ("30min",     "2025-06-25T14:15:00Z"),
+        ("1hr",       "2025-06-25T14:45:00Z"),
+        ("2hr",       "2025-06-25T15:45:00Z"),
+        ("4hr",       "2025-06-25T17:45:00Z"),
+        ("1day",      "2025-06-26T13:45:00Z"),
+        ("1week",     "2025-07-02T00:00:00Z"),
+        ("1month",    "2025-07-25T00:00:00Z"),
+        ("2months",   "2025-08-25T00:00:00Z"),
+        ("3months",   "2025-09-25T00:00:00Z"),
+        ("late",      "2025-11-01T00:00:00Z"),
     ],
     4: [
-        ("early",   "1970-01-01T00:00:00Z"),
-        ("week-1",  "2025-12-17T00:00:00Z"),
-        ("month-1", "2026-01-10T00:00:00Z"),
-        ("month-2", "2026-02-10T00:00:00Z"),
-        ("recent",  "2026-02-25T00:00:00Z"),
+        ("early",     "1970-01-01T00:00:00Z"),
+        ("30min",     "2025-12-10T16:55:00Z"),
+        ("1hr",       "2025-12-10T17:25:00Z"),
+        ("4hr",       "2025-12-10T20:25:00Z"),
+        ("1day",      "2025-12-11T16:25:00Z"),
+        ("1week",     "2025-12-17T00:00:00Z"),
+        ("2weeks",    "2025-12-24T00:00:00Z"),
+        ("1month",    "2026-01-10T00:00:00Z"),
+        ("6weeks",    "2026-01-24T00:00:00Z"),
+        ("2months",   "2026-02-10T00:00:00Z"),
+        ("10weeks",   "2026-02-20T00:00:00Z"),
+        ("recent",    "2026-02-27T00:00:00Z"),
     ],
 }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Event Utilities
+#  Event Utilities — handles both wrapped and flat event formats
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+# /v2/updates can return events in two formats:
+#   Wrapped:  {"created": {"template_id": ..., "create_arguments": ...}}
+#   Flat:     {"event_type": "created_event", "template_id": ..., "create_arguments": ...}
 
 def get_event_type(event: dict) -> str:
+    """Determine event type, handling both wrapped and flat formats."""
     for k in ("created", "exercised", "archived"):
-        if k in event:
+        if k in event and isinstance(event[k], dict):
             return k
+    et = event.get("event_type", "")
+    if et == "created_event" or "create_arguments" in event:
+        return "created"
+    if et == "exercised_event" or "choice" in event:
+        return "exercised"
+    if et == "archived_event" or event.get("archived") is True:
+        return "archived"
     return "unknown"
 
 
 def get_event_data(event: dict) -> dict:
+    """Get the inner event data dict, handling both formats."""
     for k in ("created", "exercised", "archived"):
-        if k in event:
+        if k in event and isinstance(event[k], dict):
             return event[k]
     return event
+
+
+def get_update_events(update: dict) -> Tuple[list, dict]:
+    """Extract root_event_ids and events_by_id from an update/transaction.
+
+    Handles both /v2/updates flat format and /v0/events wrapped format.
+    """
+    root_ids = update.get("root_event_ids", [])
+    events_by_id = update.get("events_by_id", {})
+    if root_ids or events_by_id:
+        return root_ids, events_by_id
+
+    update_data = update.get("update", {})
+    if isinstance(update_data, dict):
+        root_ids = update_data.get("root_event_ids", [])
+        events_by_id = update_data.get("events_by_id", {})
+    return root_ids, events_by_id
 
 
 def get_template_id(edata: dict) -> str:
@@ -135,7 +189,6 @@ def format_tree(shape, prefix=""):
     children = shape.get("children", [])
     for i, child in enumerate(children):
         connector = "├── " if i < len(children) - 1 else "└── "
-        child_pfx = prefix + ("│   " if i < len(children) - 1 else "    ")
         lines.extend(format_tree(child, prefix + connector))
     return lines
 
@@ -181,6 +234,7 @@ class TrafficPurchaseFindings:
         self.migrations_seen = set()
         self.pages_scanned = 0
         self.updates_scanned = 0
+        self.total_events_scanned = 0
         self.total_traffic_updates = 0
 
     def process_updates(self, updates: list, migration_id: int):
@@ -191,79 +245,92 @@ class TrafficPurchaseFindings:
     def _check_update(self, update: dict, migration_id: int):
         update_id = update.get("update_id", "")
         record_time = update.get("record_time", "")
-        update_data = update.get("update", {})
-        root_ids = update_data.get("root_event_ids", [])
-        events_by_id = update_data.get("events_by_id", {})
 
-        if not root_ids or not events_by_id:
+        root_ids, events_by_id = get_update_events(update)
+
+        if not root_ids and not events_by_id:
             return
+
+        self.total_events_scanned += len(events_by_id)
 
         # Check if any event is a traffic purchase
         has_traffic_purchase = False
         update_templates = set()
         update_choices = set()
 
-        for rid in root_ids:
-            for eid, event, depth in traverse(rid, events_by_id):
-                etype = get_event_type(event)
-                edata = get_event_data(event)
-                tid = get_template_id(edata)
-                choice = edata.get("choice", "") if etype == "exercised" else ""
+        # If we have root_ids, traverse the tree; otherwise iterate flat
+        if root_ids:
+            event_iter = (
+                (eid, event, depth)
+                for rid in root_ids
+                for eid, event, depth in traverse(rid, events_by_id)
+            )
+        else:
+            event_iter = (
+                (eid, event, 0)
+                for eid, event in events_by_id.items()
+            )
 
-                update_templates.add(tid)
-                if choice:
-                    update_choices.add((tid, choice))
+        for eid, event, depth in event_iter:
+            etype = get_event_type(event)
+            edata = get_event_data(event)
+            tid = get_template_id(edata)
+            choice = edata.get("choice", "") if etype == "exercised" else ""
 
-                # Found a traffic purchase exercise
-                if tid == TRAFFIC_TEMPLATE and choice == TRAFFIC_CHOICE:
-                    has_traffic_purchase = True
-                    self.migrations_seen.add(migration_id)
+            update_templates.add(tid)
+            if choice:
+                update_choices.add((tid, choice))
 
-                    # Save full event details (up to 20)
-                    if len(self.buy_traffic_events) < 20:
-                        self.buy_traffic_events.append({
-                            "update_id": update_id,
-                            "record_time": record_time,
-                            "migration_id": migration_id,
-                            "event_id": eid,
-                            "depth": depth,
-                            "choice_argument": edata.get("choice_argument"),
-                            "exercise_result": edata.get("exercise_result"),
-                            "acting_parties": edata.get("acting_parties", []),
-                            "consuming": edata.get("consuming"),
-                            "child_event_ids": edata.get("child_event_ids", []),
-                            "interface_id": edata.get("interface_id"),
-                        })
+            # Found a traffic purchase exercise
+            if tid == TRAFFIC_TEMPLATE and choice == TRAFFIC_CHOICE:
+                has_traffic_purchase = True
+                self.migrations_seen.add(migration_id)
 
-                    # Aggregate fields
-                    ca = edata.get("choice_argument")
-                    if ca and isinstance(ca, dict):
-                        collect_fields(ca, store=self.choice_arg_fields)
-                    er = edata.get("exercise_result")
-                    if er and isinstance(er, dict):
-                        collect_fields(er, store=self.exercise_result_fields)
+                # Save full event details (up to 50)
+                if len(self.buy_traffic_events) < 50:
+                    self.buy_traffic_events.append({
+                        "update_id": update_id,
+                        "record_time": record_time,
+                        "migration_id": migration_id,
+                        "event_id": eid,
+                        "depth": depth,
+                        "choice_argument": edata.get("choice_argument"),
+                        "exercise_result": edata.get("exercise_result"),
+                        "acting_parties": edata.get("acting_parties", []),
+                        "consuming": edata.get("consuming"),
+                        "child_event_ids": edata.get("child_event_ids", []),
+                        "interface_id": edata.get("interface_id"),
+                    })
 
-                    # Track acting parties
-                    for p in edata.get("acting_parties", []):
-                        self.acting_parties[p] += 1
+                # Aggregate fields
+                ca = edata.get("choice_argument")
+                if ca and isinstance(ca, dict):
+                    collect_fields(ca, store=self.choice_arg_fields)
+                er = edata.get("exercise_result")
+                if er and isinstance(er, dict):
+                    collect_fields(er, store=self.exercise_result_fields)
 
-                # Found MemberTraffic created
-                if tid == MEMBER_TRAFFIC_TEMPLATE and etype == "created":
-                    ca = edata.get("create_arguments", {})
-                    if len(self.member_traffic_events) < 20:
-                        self.member_traffic_events.append({
-                            "update_id": update_id,
-                            "record_time": record_time,
-                            "migration_id": migration_id,
-                            "event_id": eid,
-                            "create_arguments": ca,
-                            "signatories": edata.get("signatories", []),
-                            "observers": edata.get("observers", []),
-                        })
-                    if ca and isinstance(ca, dict):
-                        collect_fields(ca, store=self.member_traffic_fields)
-                    provider = ca.get("provider", "unknown") if isinstance(ca, dict) else "unknown"
-                    self.member_traffic_parties[provider] += 1
+                # Track acting parties
+                for p in edata.get("acting_parties", []):
+                    self.acting_parties[p] += 1
+
+            # Found MemberTraffic created
+            if tid == MEMBER_TRAFFIC_TEMPLATE and etype == "created":
+                ca = edata.get("create_arguments", {})
+                if len(self.member_traffic_events) < 50:
+                    self.member_traffic_events.append({
+                        "update_id": update_id,
+                        "record_time": record_time,
+                        "migration_id": migration_id,
+                        "event_id": eid,
+                        "create_arguments": ca,
+                        "signatories": edata.get("signatories", []),
+                        "observers": edata.get("observers", []),
+                    })
+                if ca and isinstance(ca, dict):
+                    collect_fields(ca, store=self.member_traffic_fields)
+                provider = ca.get("provider", "unknown") if isinstance(ca, dict) else "unknown"
+                self.member_traffic_parties[provider] += 1
 
         if has_traffic_purchase:
             self.total_traffic_updates += 1
@@ -277,9 +344,9 @@ class TrafficPurchaseFindings:
                 if ch != TRAFFIC_CHOICE:
                     self.co_occurring_choices[(tid, ch)] += 1
 
-            # Save tree structure (up to 10)
-            if len(self.tree_structures) < 10:
-                for rid in root_ids:
+            # Save tree structure (up to 20)
+            if len(self.tree_structures) < 20:
+                for rid in root_ids[:2]:
                     self.tree_structures.append({
                         "update_id": update_id,
                         "migration_id": migration_id,
@@ -299,6 +366,7 @@ def print_traffic_report(findings: TrafficPurchaseFindings):
 
     print(f"\n  Scanning Summary:")
     print(f"    Updates scanned:              {findings.updates_scanned:,}")
+    print(f"    Events scanned:               {findings.total_events_scanned:,}")
     print(f"    Pages scanned:                {findings.pages_scanned}")
     print(f"    Traffic purchase updates:     {findings.total_traffic_updates}")
     print(f"    BuyMemberTraffic events:      {len(findings.buy_traffic_events)}")
@@ -317,12 +385,12 @@ def print_traffic_report(findings: TrafficPurchaseFindings):
     print(f"{'─'*78}")
     print("  These show what a complete traffic purchase transaction looks like.")
     shown_migs = set()
-    for ts in findings.tree_structures[:6]:
+    for ts in findings.tree_structures[:10]:
         mig = ts["migration_id"]
-        if mig in shown_migs and len(shown_migs) < len(findings.migrations_seen):
+        if mig in shown_migs and len(shown_migs) >= len(findings.migrations_seen):
             continue
         shown_migs.add(mig)
-        print(f"\n  Migration {mig}, update_id={ts['update_id'][:50]}...")
+        print(f"\n  Migration {mig}, update_id={ts['update_id'][:60]}...")
         print(f"  record_time={ts['record_time'][:19]}")
         for line in format_tree(ts["tree"]):
             print(f"    {line}")
@@ -386,14 +454,14 @@ def print_traffic_report(findings: TrafficPurchaseFindings):
     print(f"\n{'─'*78}")
     print("  ACTING PARTIES (who initiates traffic purchases)")
     print(f"{'─'*78}")
-    for party, count in findings.acting_parties.most_common(10):
-        short = party[:55] + "..." if len(party) > 55 else party
+    for party, count in findings.acting_parties.most_common(15):
+        short = party[:60] + "..." if len(party) > 60 else party
         print(f"  {count:>5}  {short}")
 
     if findings.member_traffic_parties:
         print(f"\n  MEMBER TRAFFIC PROVIDERS:")
-        for party, count in findings.member_traffic_parties.most_common(10):
-            short = party[:55] + "..." if len(party) > 55 else party
+        for party, count in findings.member_traffic_parties.most_common(15):
+            short = party[:60] + "..." if len(party) > 60 else party
             print(f"  {count:>5}  {short}")
 
     # ── Co-occurring templates ──
@@ -401,61 +469,40 @@ def print_traffic_report(findings: TrafficPurchaseFindings):
         print(f"\n{'─'*78}")
         print("  CO-OCCURRING TEMPLATES (what else happens in same update)")
         print(f"{'─'*78}")
-        for tid, count in findings.co_occurring_templates.most_common(15):
+        for tid, count in findings.co_occurring_templates.most_common(20):
             print(f"  {count:>5}  {tid}")
 
     if findings.co_occurring_choices:
         print(f"\n  CO-OCCURRING CHOICES:")
-        for (tid, ch), count in findings.co_occurring_choices.most_common(10):
+        for (tid, ch), count in findings.co_occurring_choices.most_common(15):
             print(f"  {count:>5}  {tid} [{ch}]")
 
     # ── Sample Event Details ──
     print(f"\n{'─'*78}")
     print("  SAMPLE TRAFFIC PURCHASE EVENTS (full detail)")
     print(f"{'─'*78}")
-    for i, evt in enumerate(findings.buy_traffic_events[:3]):
+    for i, evt in enumerate(findings.buy_traffic_events[:5]):
         print(f"\n  Sample {i+1}:")
         print(f"    update_id:      {evt['update_id']}")
         print(f"    migration_id:   {evt['migration_id']}")
         print(f"    record_time:    {evt['record_time']}")
         print(f"    depth:          {evt['depth']}")
         print(f"    consuming:      {evt['consuming']}")
-        print(f"    acting_parties: {json.dumps(evt['acting_parties'][:2], indent=6)}")
+        parties = evt.get('acting_parties', [])
+        for p in parties[:2]:
+            short = p[:65] + "..." if len(p) > 65 else p
+            print(f"    acting_party:   {short}")
         print(f"    interface_id:   {evt.get('interface_id')}")
         if evt.get("choice_argument"):
+            ca_str = json.dumps(evt['choice_argument'], indent=6, default=str)
             print(f"    choice_argument:")
-            print(f"      {json.dumps(evt['choice_argument'], indent=6, default=str)[:500]}")
+            for line in ca_str[:1000].split('\n'):
+                print(f"      {line}")
         if evt.get("exercise_result"):
+            er_str = json.dumps(evt['exercise_result'], indent=6, default=str)
             print(f"    exercise_result:")
-            print(f"      {json.dumps(evt['exercise_result'], indent=6, default=str)[:500]}")
-
-    # ── Interpretation Notes ──
-    print(f"\n{'═'*78}")
-    print("  INTERPRETATION NOTES")
-    print(f"{'═'*78}")
-    print("""
-  Traffic Purchase Transaction Flow:
-    1. A party exercises AmuletRules_BuyMemberTraffic on the AmuletRules contract
-    2. choice_argument specifies: which member, how much traffic, payment details
-    3. exercise_result returns: the outcome including any new contracts
-    4. Child events typically include:
-       - Archive of consumed Amulet (CC payment)
-       - Creation of MemberTraffic record (the bandwidth allocation)
-       - Creation of new Amulet (change from payment)
-       - Possible reward coupon creation
-
-  Key Fields to Watch:
-    - choice_argument.member: the participant ID buying traffic
-    - choice_argument.trafficAmount: how much bandwidth (in bytes)
-    - choice_argument.round: which mining round this applies to
-    - exercise_result: contains the summary of CC spent and traffic allocated
-
-  Economics:
-    - Traffic rate: $17 per MB of synchronizer bandwidth
-    - Typical transfer: ~20KB = 0.02MB → $0.34 in traffic cost
-    - Traffic purchases themselves consume bandwidth (small overhead)
-    - Tracked in round-party-totals as 'traffic_purchased_cc_spent'
-""")
+            for line in er_str[:1000].split('\n'):
+                print(f"      {line}")
 
 
 def save_traffic_json(findings: TrafficPurchaseFindings, output_dir: str):
@@ -464,6 +511,7 @@ def save_traffic_json(findings: TrafficPurchaseFindings, output_dir: str):
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "summary": {
             "updates_scanned": findings.updates_scanned,
+            "events_scanned": findings.total_events_scanned,
             "pages_scanned": findings.pages_scanned,
             "traffic_purchase_updates": findings.total_traffic_updates,
             "buy_traffic_events": len(findings.buy_traffic_events),
@@ -472,7 +520,7 @@ def save_traffic_json(findings: TrafficPurchaseFindings, output_dir: str):
         },
         "buy_traffic_events": findings.buy_traffic_events,
         "member_traffic_events": findings.member_traffic_events,
-        "tree_structures": findings.tree_structures[:5],
+        "tree_structures": findings.tree_structures[:10],
         "choice_arg_fields": {
             k: {"count": v["count"], "types": list(v["types"]), "samples": v["samples"]}
             for k, v in findings.choice_arg_fields.items()
@@ -485,12 +533,12 @@ def save_traffic_json(findings: TrafficPurchaseFindings, output_dir: str):
             k: {"count": v["count"], "types": list(v["types"]), "samples": v["samples"]}
             for k, v in findings.member_traffic_fields.items()
         },
-        "acting_parties": dict(findings.acting_parties.most_common(20)),
-        "member_traffic_parties": dict(findings.member_traffic_parties.most_common(20)),
-        "co_occurring_templates": dict(findings.co_occurring_templates.most_common(20)),
+        "acting_parties": dict(findings.acting_parties.most_common(30)),
+        "member_traffic_parties": dict(findings.member_traffic_parties.most_common(30)),
+        "co_occurring_templates": dict(findings.co_occurring_templates.most_common(30)),
         "co_occurring_choices": [
             {"template_id": t, "choice": c, "count": n}
-            for (t, c), n in findings.co_occurring_choices.most_common(20)
+            for (t, c), n in findings.co_occurring_choices.most_common(30)
         ],
         "events_per_update": findings.events_per_update,
     }
@@ -511,16 +559,16 @@ def main():
         description="Deep-dive into Canton traffic purchase transactions"
     )
     parser.add_argument(
-        "--pages-per-sample", type=int, default=3,
-        help="Pages to fetch per sample window (default: 3)",
+        "--pages-per-sample", type=int, default=10,
+        help="Pages to fetch per sample window (default: 10)",
     )
     parser.add_argument(
-        "--page-size", type=int, default=200,
-        help="Updates per page (default: 200)",
+        "--page-size", type=int, default=500,
+        help="Updates per page (default: 500)",
     )
     parser.add_argument(
-        "--max-samples", type=int, default=20,
-        help="Stop after finding this many traffic purchase events (default: 20)",
+        "--max-samples", type=int, default=50,
+        help="Stop after finding this many traffic purchase events (default: 50)",
     )
     parser.add_argument(
         "--output-dir", type=str, default="scripts/output/exploration",
@@ -537,14 +585,20 @@ def main():
 
     migrations = args.migration if args.migration is not None else list(SAMPLE_WINDOWS.keys())
 
+    total_windows = sum(len(SAMPLE_WINDOWS.get(m, [])) for m in migrations)
+    est_calls = total_windows * args.pages_per_sample
+
     print("=" * 78)
     print("  CANTON TRAFFIC PURCHASE DEEP-DIVE")
     print(f"  Migrations: {migrations}")
-    print(f"  Pages/sample: {args.pages_per_sample}")
+    print(f"  Sample windows: {total_windows}")
+    print(f"  Pages/sample: {args.pages_per_sample}, Page size: {args.page_size}")
+    print(f"  Estimated API calls: ~{est_calls}")
     print(f"  Stop after: {args.max_samples} traffic purchase events")
+    print(f"  Estimated runtime: ~{est_calls * 0.5 / 60:.0f}-{est_calls * 1.0 / 60:.0f} minutes")
     print("=" * 78)
 
-    client = SpliceScanClient(base_url=args.base_url, timeout=30)
+    client = SpliceScanClient(base_url=args.base_url, timeout=60)
 
     print("\nChecking API health...")
     if not client.health_check():
@@ -554,6 +608,7 @@ def main():
 
     findings = TrafficPurchaseFindings()
     start_time = time.time()
+    windows_done = 0
 
     for mig_id in migrations:
         windows = SAMPLE_WINDOWS.get(mig_id, [("start", "1970-01-01T00:00:00Z")])
@@ -567,9 +622,15 @@ def main():
                 print(f"  Reached {args.max_samples} samples, stopping.")
                 break
 
-            print(f"\n  [{label}] after={after_rt}")
+            windows_done += 1
+            elapsed = time.time() - start_time
+            print(f"\n  [{label}] after={after_rt}  "
+                  f"(window {windows_done}/{total_windows}, {elapsed:.0f}s elapsed)")
+
             cursor = after_rt
             for page in range(args.pages_per_sample):
+                if len(findings.buy_traffic_events) >= args.max_samples:
+                    break
                 try:
                     resp = client.get_updates(
                         after_migration_id=mig_id,
@@ -591,6 +652,8 @@ def main():
                           f"{found} traffic purchases found "
                           f"(total: {len(findings.buy_traffic_events)})")
 
+                    if len(updates) < args.page_size:
+                        break  # Reached end of data for this window
                     time.sleep(REQUEST_DELAY)
 
                 except Exception as e:
@@ -601,7 +664,7 @@ def main():
             break
 
     elapsed = time.time() - start_time
-    print(f"\nSearch complete in {elapsed:.1f}s")
+    print(f"\nSearch complete in {elapsed:.1f}s ({elapsed/60:.1f} min)")
 
     print_traffic_report(findings)
     save_traffic_json(findings, args.output_dir)

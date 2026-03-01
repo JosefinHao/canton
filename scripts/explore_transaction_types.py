@@ -1,18 +1,17 @@
 """
-Canton On-Chain Data Exploration: Smart Sampling Strategy
+Canton On-Chain Data Exploration: Thorough Sampling Strategy
 
-With 10+ TB of historical data across migrations 0-4, we cannot scan everything.
-This script uses targeted sampling to build an understanding of the transaction
-type landscape without reading the full dataset.
+With 10+ TB of historical data across migrations 0-4, we use deep targeted sampling
+to build a comprehensive understanding of the transaction type landscape.
 
 Sampling Strategy:
-  1. MIGRATION BOUNDARY SAMPLING - First 1-2 pages from each migration (0-4)
+  1. MIGRATION BOUNDARY SAMPLING - Multiple pages from each migration (0-4)
      to discover which templates/choices exist at the start of each epoch.
-     Short-lived migrations (0-2) may fit in a few pages entirely.
+     Short-lived migrations (0-2) are scanned more fully.
 
   2. TEMPORAL SAMPLING - For long-running migrations (3 and 4), sample at
-     early, middle, and recent time windows to detect if the transaction mix
-     evolves over time.
+     many time windows spread across the full timeline to capture the
+     evolution of the transaction mix.
 
   3. SCHEMA EVOLUTION DETECTION - Compare the same template_id's payload
      structure across different migrations to detect field changes. This is
@@ -28,13 +27,12 @@ Output:
 
 Usage (run from whitelisted VM):
     python scripts/explore_transaction_types.py
-    python scripts/explore_transaction_types.py --pages-per-sample 3
+    python scripts/explore_transaction_types.py --pages-per-sample 20
     python scripts/explore_transaction_types.py --output-dir scripts/output/exploration
 
 Design Notes:
-  - Each sample point makes 1-3 API calls (small footprint)
-  - Total API calls: ~30-50 across all migrations and sample points
-  - Runtime: ~2-5 minutes depending on network latency
+  - Default: ~10 sample points × 10 pages × 500 updates = ~50,000 updates sampled
+  - Runtime: ~10-20 minutes depending on network latency
   - No BigQuery dependency — works entirely against the Scan API
 """
 
@@ -51,7 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.canton_scan_client import SpliceScanClient
 
 BASE_URL = "https://scan.sv-1.global.canton.network.sync.global/api/scan/"
-REQUEST_DELAY = 0.3
+REQUEST_DELAY = 0.15
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Sample Point Definitions
@@ -60,52 +58,114 @@ REQUEST_DELAY = 0.3
 # Each migration has known approximate time ranges (from prior pipeline runs).
 # We sample at strategic points within each.
 #
-# Migrations 0-2 are short (few hours to days) — we sample the start only.
-# Migrations 3-4 are long-running — we sample early/middle/late.
+# Migrations 0-2 are short — we scan deeper from the start to get more coverage.
+# Migrations 3-4 are long-running — we sample many time windows across the full span.
 
 SAMPLE_POINTS = {
     0: [
-        ("start", "1970-01-01T00:00:00Z"),
+        ("start",  "1970-01-01T00:00:00Z"),
+        ("mid",    "2024-06-25T00:00:00Z"),
+        ("late",   "2024-08-01T00:00:00Z"),
     ],
     1: [
-        ("start", "1970-01-01T00:00:00Z"),
+        ("start",  "1970-01-01T00:00:00Z"),
+        ("mid",    "2024-10-16T14:00:00Z"),
+        ("late",   "2024-11-01T00:00:00Z"),
     ],
     2: [
-        ("start", "1970-01-01T00:00:00Z"),
+        ("start",  "1970-01-01T00:00:00Z"),
+        ("mid",    "2024-12-11T15:00:00Z"),
+        ("late",   "2025-01-01T00:00:00Z"),
     ],
     3: [
-        ("early",  "1970-01-01T00:00:00Z"),         # First page
-        ("middle", "2025-06-25T14:30:00Z"),          # ~45 min into migration 3
-        ("late",   "2025-06-25T16:00:00Z"),          # ~2.25 hours in
+        ("early",     "1970-01-01T00:00:00Z"),
+        ("30min",     "2025-06-25T14:15:00Z"),
+        ("1hr",       "2025-06-25T14:45:00Z"),
+        ("2hr",       "2025-06-25T15:45:00Z"),
+        ("4hr",       "2025-06-25T17:45:00Z"),
+        ("1day",      "2025-06-26T13:45:00Z"),
+        ("1week",     "2025-07-02T00:00:00Z"),
+        ("2weeks",    "2025-07-09T00:00:00Z"),
+        ("1month",    "2025-07-25T00:00:00Z"),
+        ("2months",   "2025-08-25T00:00:00Z"),
+        ("3months",   "2025-09-25T00:00:00Z"),
+        ("late",      "2025-11-01T00:00:00Z"),
     ],
     4: [
-        ("early",  "1970-01-01T00:00:00Z"),          # First page
-        ("middle", "2025-12-15T00:00:00Z"),          # ~5 days in
-        ("recent", "2026-01-15T00:00:00Z"),          # ~1 month in
-        ("latest", "2026-02-15T00:00:00Z"),          # Recent (close to now)
+        ("early",     "1970-01-01T00:00:00Z"),
+        ("30min",     "2025-12-10T16:55:00Z"),
+        ("1hr",       "2025-12-10T17:25:00Z"),
+        ("4hr",       "2025-12-10T20:25:00Z"),
+        ("1day",      "2025-12-11T16:25:00Z"),
+        ("1week",     "2025-12-17T00:00:00Z"),
+        ("2weeks",    "2025-12-24T00:00:00Z"),
+        ("1month",    "2026-01-10T00:00:00Z"),
+        ("6weeks",    "2026-01-24T00:00:00Z"),
+        ("2months",   "2026-02-10T00:00:00Z"),
+        ("10weeks",   "2026-02-20T00:00:00Z"),
+        ("recent",    "2026-02-27T00:00:00Z"),
     ],
 }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Event Parsing Utilities
+#  Event Parsing Utilities — handles both wrapped and flat event formats
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+# The /v2/updates API can return events in two formats:
+#   Wrapped:  {"created": {"template_id": ..., "create_arguments": ...}}
+#   Flat:     {"event_type": "created_event", "template_id": ..., "create_arguments": ...}
+#
+# The production data_ingestion_pipeline.py uses flat access.
+# The update_tree_processor.py expects wrapped access.
+# We handle both to be robust.
 
 def get_event_type(event: dict) -> str:
-    if "created" in event:
+    """Determine event type, handling both wrapped and flat formats."""
+    # Wrapped format (old): {"created": {...}}, {"exercised": {...}}, {"archived": {...}}
+    for k in ("created", "exercised", "archived"):
+        if k in event and isinstance(event[k], dict):
+            return k
+    # Flat format: {"event_type": "created_event", ...} or presence of key fields
+    et = event.get("event_type", "")
+    if et == "created_event" or "create_arguments" in event:
         return "created"
-    elif "exercised" in event:
+    if et == "exercised_event" or "choice" in event:
         return "exercised"
-    elif "archived" in event:
+    if et == "archived_event" or event.get("archived") is True:
         return "archived"
     return "unknown"
 
 
 def get_event_data(event: dict) -> dict:
-    for key in ("created", "exercised", "archived"):
-        if key in event:
-            return event[key]
+    """Get the inner event data dict, handling both formats."""
+    # Wrapped format: return the inner dict
+    for k in ("created", "exercised", "archived"):
+        if k in event and isinstance(event[k], dict):
+            return event[k]
+    # Flat format: the event itself contains all fields
     return event
+
+
+def get_update_events(update: dict) -> Tuple[list, dict]:
+    """Extract root_event_ids and events_by_id from an update/transaction.
+
+    Handles both:
+      - /v2/updates flat format: root_event_ids and events_by_id are top-level
+      - /v0/events wrapped format: nested under update.update
+    """
+    # Try flat format first (what /v2/updates returns via get_updates())
+    root_ids = update.get("root_event_ids", [])
+    events_by_id = update.get("events_by_id", {})
+    if root_ids or events_by_id:
+        return root_ids, events_by_id
+
+    # Fall back to wrapped format (what /v0/events uses)
+    update_data = update.get("update", {})
+    if isinstance(update_data, dict):
+        root_ids = update_data.get("root_event_ids", [])
+        events_by_id = update_data.get("events_by_id", {})
+    return root_ids, events_by_id
 
 
 def get_template_id(event_data: dict) -> str:
@@ -161,9 +221,6 @@ def flatten_tree_shape(shape: dict, lines: list = None, prefix: str = "") -> lis
     children = shape.get("children", [])
     for i, child in enumerate(children):
         connector = "├── " if i < len(children) - 1 else "└── "
-        child_prefix = prefix + ("│   " if i < len(children) - 1 else "    ")
-        lines.append("")  # will be replaced
-        lines.pop()
         flatten_tree_shape(child, lines, prefix + connector)
     return lines
 
@@ -209,6 +266,8 @@ class SampleResult:
         self.label = label
         self.updates_count = 0
         self.events_count = 0
+        self.updates_with_events = 0
+        self.updates_without_events = 0
         self.time_range = {"earliest": None, "latest": None}
         self.template_counts = Counter()
         self.template_event_counts = Counter()  # (template, event_type) -> count
@@ -217,13 +276,13 @@ class SampleResult:
         self.synchronizer_ids = Counter()
         self.tree_depths = Counter()
         self.payload_fields = defaultdict(dict)  # template_key -> {field -> info}
-        self.sample_trees = []                   # up to 3 full tree shapes per window
+        self.sample_trees = []                   # up to 5 full tree shapes per window
         self.raw_updates = []                    # first few raw updates for reference
 
     def process_updates(self, updates: list):
         for update in updates:
             self._process_one(update)
-            if len(self.raw_updates) < 2:
+            if len(self.raw_updates) < 3:
                 self.raw_updates.append(update)
 
     def _process_one(self, update: dict):
@@ -238,54 +297,68 @@ class SampleResult:
             if not self.time_range["latest"] or record_time > self.time_range["latest"]:
                 self.time_range["latest"] = record_time
 
-        update_data = update.get("update", {})
-        root_ids = update_data.get("root_event_ids", [])
-        events_by_id = update_data.get("events_by_id", {})
-        if not root_ids or not events_by_id:
+        root_ids, events_by_id = get_update_events(update)
+
+        if not root_ids and not events_by_id:
+            self.updates_without_events += 1
+            # Even without tree structure, try to count events from flat events_by_id
+            # (some updates may have events_by_id but no root_event_ids)
             return
 
-        # Save tree shapes (up to 3 per sample)
-        if len(self.sample_trees) < 3:
-            for rid in root_ids:
+        if events_by_id and not root_ids:
+            # Has events but no root IDs — process all events flat
+            self.updates_with_events += 1
+            for event_id, event in events_by_id.items():
+                self._process_event(event_id, event, 0)
+            return
+
+        self.updates_with_events += 1
+
+        # Save tree shapes (up to 5 per sample)
+        if len(self.sample_trees) < 5:
+            for rid in root_ids[:2]:  # max 2 roots per update
                 self.sample_trees.append(get_tree_shape(rid, events_by_id))
 
         for rid in root_ids:
             for event_id, event, depth in traverse_tree(rid, events_by_id):
-                self.events_count += 1
-                self.tree_depths[depth] += 1
+                self._process_event(event_id, event, depth)
 
-                etype = get_event_type(event)
-                edata = get_event_data(event)
-                tid = get_template_id(edata)
-                choice = edata.get("choice", "") if etype == "exercised" else ""
-                pkg = edata.get("package_name", "")
+    def _process_event(self, event_id: str, event: dict, depth: int):
+        self.events_count += 1
+        self.tree_depths[depth] += 1
 
-                self.template_counts[tid] += 1
-                self.template_event_counts[(tid, etype)] += 1
-                if choice:
-                    self.choice_counts[(tid, choice)] += 1
-                if pkg:
-                    self.package_names[pkg] += 1
+        etype = get_event_type(event)
+        edata = get_event_data(event)
+        tid = get_template_id(edata)
+        choice = edata.get("choice", "") if etype == "exercised" else ""
+        pkg = edata.get("package_name", "")
 
-                # Payload field inventory for top templates
-                template_key = f"{tid}:{etype}"
-                if choice:
-                    template_key = f"{tid}:{choice}"
-                if etype == "created":
-                    args = edata.get("create_arguments", {})
-                    if args and isinstance(args, dict):
-                        inventory_payload_fields(args, "", self.payload_fields[template_key])
-                elif etype == "exercised" and choice:
-                    cargs = edata.get("choice_argument", {})
-                    if cargs and isinstance(cargs, dict):
-                        inventory_payload_fields(
-                            cargs, "", self.payload_fields[f"{template_key}:choice_arg"]
-                        )
-                    eres = edata.get("exercise_result", {})
-                    if eres and isinstance(eres, dict):
-                        inventory_payload_fields(
-                            eres, "", self.payload_fields[f"{template_key}:result"]
-                        )
+        self.template_counts[tid] += 1
+        self.template_event_counts[(tid, etype)] += 1
+        if choice:
+            self.choice_counts[(tid, choice)] += 1
+        if pkg:
+            self.package_names[pkg] += 1
+
+        # Payload field inventory for top templates
+        template_key = f"{tid}:{etype}"
+        if choice:
+            template_key = f"{tid}:{choice}"
+        if etype == "created":
+            args = edata.get("create_arguments", {})
+            if args and isinstance(args, dict):
+                inventory_payload_fields(args, "", self.payload_fields[template_key])
+        elif etype == "exercised" and choice:
+            cargs = edata.get("choice_argument", {})
+            if cargs and isinstance(cargs, dict):
+                inventory_payload_fields(
+                    cargs, "", self.payload_fields[f"{template_key}:choice_arg"]
+                )
+            eres = edata.get("exercise_result", {})
+            if eres and isinstance(eres, dict):
+                inventory_payload_fields(
+                    eres, "", self.payload_fields[f"{template_key}:result"]
+                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -296,10 +369,10 @@ def fetch_sample(
     client: SpliceScanClient,
     migration_id: int,
     after_record_time: str,
-    pages: int = 2,
-    page_size: int = 200,
+    pages: int = 10,
+    page_size: int = 500,
 ) -> list:
-    """Fetch a small number of pages starting at a time point."""
+    """Fetch multiple pages starting at a time point."""
     all_updates = []
     cursor_time = after_record_time
 
@@ -315,6 +388,9 @@ def fetch_sample(
                 break
             all_updates.extend(updates)
             cursor_time = updates[-1].get("record_time", "")
+            if len(updates) < page_size:
+                # Got fewer than requested — reached end of data for this window
+                break
             time.sleep(REQUEST_DELAY)
         except Exception as e:
             print(f"    ERROR on page {page+1}: {e}")
@@ -398,12 +474,14 @@ def print_report(all_results: List[SampleResult]):
 
     print("\n" + "=" * 78)
     print("  CANTON ON-CHAIN DATA EXPLORATION REPORT")
-    print("  Smart Sampling Across Migrations 0-4")
+    print("  Thorough Sampling Across Migrations 0-4")
     print("=" * 78)
 
     # ── Aggregate across all samples ──
     total_updates = sum(r.updates_count for r in all_results)
     total_events = sum(r.events_count for r in all_results)
+    total_with = sum(r.updates_with_events for r in all_results)
+    total_without = sum(r.updates_without_events for r in all_results)
     all_templates = Counter()
     all_template_events = Counter()
     all_choices = Counter()
@@ -418,12 +496,15 @@ def print_report(all_results: List[SampleResult]):
         all_syncs += r.synchronizer_ids
 
     print(f"\n  Sampling Summary:")
-    print(f"    Total sample windows:     {len(all_results)}")
-    print(f"    Total updates sampled:    {total_updates:,}")
-    print(f"    Total events sampled:     {total_events:,}")
-    print(f"    Unique template IDs:      {len(all_templates)}")
-    print(f"    Unique choices:           {len(all_choices)}")
-    print(f"    Unique synchronizer IDs:  {len(all_syncs)}")
+    print(f"    Total sample windows:       {len(all_results)}")
+    print(f"    Total updates sampled:      {total_updates:,}")
+    print(f"    Updates with events:        {total_with:,}")
+    print(f"    Updates without events:     {total_without:,}")
+    print(f"    Total events sampled:       {total_events:,}")
+    print(f"    Unique template IDs:        {len(all_templates)}")
+    print(f"    Unique choices:             {len(all_choices)}")
+    print(f"    Unique synchronizer IDs:    {len(all_syncs)}")
+    print(f"    Unique package names:       {len(all_packages)}")
 
     # ── Per-Migration Summaries ──
     print(f"\n{'─'*78}")
@@ -438,11 +519,13 @@ def print_report(all_results: List[SampleResult]):
 
         earliest = r.time_range["earliest"][:19] if r.time_range["earliest"] else "N/A"
         latest = r.time_range["latest"][:19] if r.time_range["latest"] else "N/A"
-        print(f"    [{r.label:>8}]  {r.updates_count:>4} updates, "
-              f"{r.events_count:>6} events,  "
+        print(f"    [{r.label:>10}]  {r.updates_count:>5} updates, "
+              f"{r.events_count:>7} events  "
+              f"({r.updates_with_events} w/ events, {r.updates_without_events} w/o)  "
               f"{earliest} → {latest}")
-        print(f"              top templates: "
-              + ", ".join(f"{tid}({c})" for tid, c in r.template_counts.most_common(3)))
+        if r.template_counts:
+            top = ", ".join(f"{tid}({c})" for tid, c in r.template_counts.most_common(3))
+            print(f"               top: {top}")
 
     # ── Synchronizer IDs ──
     if all_syncs:
@@ -454,33 +537,36 @@ def print_report(all_results: List[SampleResult]):
             print(f"  {count:>8,}  {short}")
 
     # ── Template Frequency (Aggregated from Samples) ──
-    print(f"\n{'─'*78}")
-    print("  TEMPLATE IDs BY FREQUENCY (aggregated across all samples)")
-    print(f"  Note: These are SAMPLE frequencies, not total counts over 10+ TB.")
-    print(f"{'─'*78}")
-    print(f"  {'Count':>10}  {'Pct':>6}  Template ID")
-    print(f"  {'─'*10}  {'─'*6}  {'─'*50}")
-    for tid, count in all_templates.most_common(30):
-        pct = 100.0 * count / total_events if total_events else 0
-        print(f"  {count:>10,}  {pct:>5.1f}%  {tid}")
+    if all_templates:
+        print(f"\n{'─'*78}")
+        print("  TEMPLATE IDs BY FREQUENCY (aggregated across all samples)")
+        print(f"  Note: These are SAMPLE frequencies, not total counts over 10+ TB.")
+        print(f"{'─'*78}")
+        print(f"  {'Count':>10}  {'Pct':>6}  Template ID")
+        print(f"  {'─'*10}  {'─'*6}  {'─'*50}")
+        for tid, count in all_templates.most_common(40):
+            pct = 100.0 * count / total_events if total_events else 0
+            print(f"  {count:>10,}  {pct:>5.1f}%  {tid}")
 
     # ── Template × Event Type ──
-    print(f"\n{'─'*78}")
-    print("  TEMPLATE × EVENT TYPE DISTRIBUTION")
-    print(f"{'─'*78}")
-    print(f"  {'Count':>10}  {'Type':<12}  Template ID")
-    print(f"  {'─'*10}  {'─'*12}  {'─'*50}")
-    for (tid, etype), count in all_template_events.most_common(40):
-        print(f"  {count:>10,}  {etype:<12}  {tid}")
+    if all_template_events:
+        print(f"\n{'─'*78}")
+        print("  TEMPLATE x EVENT TYPE DISTRIBUTION")
+        print(f"{'─'*78}")
+        print(f"  {'Count':>10}  {'Type':<12}  Template ID")
+        print(f"  {'─'*10}  {'─'*12}  {'─'*50}")
+        for (tid, etype), count in all_template_events.most_common(50):
+            print(f"  {count:>10,}  {etype:<12}  {tid}")
 
     # ── Choice Distribution ──
-    print(f"\n{'─'*78}")
-    print("  CHOICE DISTRIBUTION (exercised events)")
-    print(f"{'─'*78}")
-    print(f"  {'Count':>10}  Template ID  ─  Choice")
-    print(f"  {'─'*10}  {'─'*60}")
-    for (tid, choice), count in all_choices.most_common(30):
-        print(f"  {count:>10,}  {tid}  ─  {choice}")
+    if all_choices:
+        print(f"\n{'─'*78}")
+        print("  CHOICE DISTRIBUTION (exercised events)")
+        print(f"{'─'*78}")
+        print(f"  {'Count':>10}  Template ID  --  Choice")
+        print(f"  {'─'*10}  {'─'*60}")
+        for (tid, choice), count in all_choices.most_common(40):
+            print(f"  {count:>10,}  {tid}  --  {choice}")
 
     # ── Template Presence by Migration ──
     print(f"\n{'─'*78}")
@@ -498,9 +584,9 @@ def print_report(all_results: List[SampleResult]):
     print(header)
     print(f"  {'─'*55} " + "─" * (3 * len(mig_ids_seen)))
 
-    for tid, count in all_templates.most_common(25):
+    for tid, count in all_templates.most_common(30):
         present = mig_template_presence[tid]
-        flags = " ".join(("✓ " if m in present else "  ") for m in mig_ids_seen)
+        flags = " ".join(("Y " if m in present else ". ") for m in mig_ids_seen)
         print(f"  {tid:<55} {flags}")
 
     # ── Tree Structure Stats ──
@@ -508,34 +594,38 @@ def print_report(all_results: List[SampleResult]):
     for r in all_results:
         all_depths += r.tree_depths
 
-    print(f"\n{'─'*78}")
-    print("  EVENT TREE DEPTH DISTRIBUTION")
-    print(f"{'─'*78}")
-    for depth in sorted(all_depths.keys()):
-        count = all_depths[depth]
-        bar = "█" * min(count // max(1, total_events // 200), 60)
-        print(f"    depth {depth:>2}: {count:>8,}  {bar}")
+    if all_depths:
+        print(f"\n{'─'*78}")
+        print("  EVENT TREE DEPTH DISTRIBUTION")
+        print(f"{'─'*78}")
+        max_count = max(all_depths.values()) if all_depths else 1
+        for depth in sorted(all_depths.keys()):
+            count = all_depths[depth]
+            bar_len = int(60 * count / max_count) if max_count > 0 else 0
+            bar = "█" * bar_len
+            print(f"    depth {depth:>2}: {count:>8,}  {bar}")
 
     # ── Sample Tree Shapes ──
     print(f"\n{'─'*78}")
-    print("  SAMPLE EVENT TREE STRUCTURES (first few from each migration)")
+    print("  SAMPLE EVENT TREE STRUCTURES (from each migration)")
     print(f"{'─'*78}")
-    shown = 0
+    shown_migs = set()
     for r in all_results:
-        if r.sample_trees and shown < 6:
+        if r.sample_trees and r.migration_id not in shown_migs:
+            shown_migs.add(r.migration_id)
             print(f"\n  Migration {r.migration_id} [{r.label}]:")
-            for tree in r.sample_trees[:1]:
+            for tree in r.sample_trees[:2]:
                 lines = flatten_tree_shape(tree)
                 for line in lines:
                     print(f"    {line}")
-                shown += 1
+                print()
 
     # ── Package Names ──
     if all_packages:
         print(f"\n{'─'*78}")
         print("  PACKAGE NAMES")
         print(f"{'─'*78}")
-        for pkg, count in all_packages.most_common(10):
+        for pkg, count in all_packages.most_common(15):
             print(f"  {count:>10,}  {pkg}")
 
 
@@ -567,7 +657,7 @@ def print_categorization(all_results: List[SampleResult]):
                 "Splice.Round:ClosedMiningRound",
                 "Splice.Round:SummarizingMiningRound",
             ],
-            "desc": "Mining round lifecycle (open → issuing → closed, ~10 min intervals)",
+            "desc": "Mining round lifecycle (open -> issuing -> closed, ~10 min intervals)",
         },
         "Rewards (Coupons)": {
             "templates": [
@@ -641,7 +731,7 @@ def print_categorization(all_results: List[SampleResult]):
     # Uncategorized
     uncategorized = {
         tid: c for tid, c in all_templates.items()
-        if tid not in categorized_templates and tid != "unknown" and c >= 3
+        if tid not in categorized_templates and tid != "unknown" and c >= 2
     }
     if uncategorized:
         print(f"\n  UNCATEGORIZED TEMPLATES:")
@@ -660,15 +750,17 @@ def save_json_report(all_results: List[SampleResult], output_dir: str):
 
     report = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
-        "strategy": "smart_sampling",
+        "strategy": "thorough_sampling",
         "description": (
-            "Transaction type exploration via targeted sampling across migrations 0-4. "
+            "Transaction type exploration via thorough sampling across migrations 0-4. "
             "Frequencies are sample-based estimates, not global counts."
         ),
         "sampling_summary": {
             "total_windows": len(all_results),
             "total_updates_sampled": sum(r.updates_count for r in all_results),
             "total_events_sampled": sum(r.events_count for r in all_results),
+            "updates_with_events": sum(r.updates_with_events for r in all_results),
+            "updates_without_events": sum(r.updates_without_events for r in all_results),
         },
         "per_migration_samples": [
             {
@@ -676,17 +768,19 @@ def save_json_report(all_results: List[SampleResult], output_dir: str):
                 "label": r.label,
                 "updates": r.updates_count,
                 "events": r.events_count,
+                "updates_with_events": r.updates_with_events,
+                "updates_without_events": r.updates_without_events,
                 "time_range": r.time_range,
                 "top_templates": [
                     {"template_id": tid, "count": c}
-                    for tid, c in r.template_counts.most_common(15)
+                    for tid, c in r.template_counts.most_common(20)
                 ],
                 "top_choices": [
                     {"template_id": tid, "choice": ch, "count": c}
-                    for (tid, ch), c in r.choice_counts.most_common(10)
+                    for (tid, ch), c in r.choice_counts.most_common(15)
                 ],
                 "synchronizer_ids": dict(r.synchronizer_ids),
-                "sample_trees": r.sample_trees[:2],
+                "sample_trees": r.sample_trees[:3],
             }
             for r in all_results
         ],
@@ -747,15 +841,15 @@ def save_json_report(all_results: List[SampleResult], output_dir: str):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Smart sampling exploration of Canton on-chain data"
+        description="Thorough sampling exploration of Canton on-chain data"
     )
     parser.add_argument(
-        "--pages-per-sample", type=int, default=2,
-        help="Pages to fetch per sample window (default: 2)",
+        "--pages-per-sample", type=int, default=10,
+        help="Pages to fetch per sample window (default: 10)",
     )
     parser.add_argument(
-        "--page-size", type=int, default=200,
-        help="Updates per page (default: 200)",
+        "--page-size", type=int, default=500,
+        help="Updates per page (default: 500, max: 500)",
     )
     parser.add_argument(
         "--output-dir", type=str, default="scripts/output/exploration",
@@ -773,15 +867,22 @@ def main():
 
     migrations = args.migration if args.migration is not None else list(SAMPLE_POINTS.keys())
 
+    total_points = sum(len(SAMPLE_POINTS.get(m, [])) for m in migrations)
+    est_calls = total_points * args.pages_per_sample
+    est_updates = est_calls * args.page_size
+
     print("=" * 78)
     print("  CANTON ON-CHAIN DATA EXPLORATION")
-    print("  Strategy: Smart Sampling Across Migrations")
+    print("  Strategy: Thorough Sampling Across Migrations")
     print(f"  Migrations: {migrations}")
+    print(f"  Sample windows: {total_points}")
     print(f"  Pages/sample: {args.pages_per_sample}, Page size: {args.page_size}")
-    print(f"  Estimated API calls: ~{sum(len(SAMPLE_POINTS.get(m, [])) for m in migrations) * args.pages_per_sample}")
+    print(f"  Estimated API calls: ~{est_calls}")
+    print(f"  Estimated updates to sample: ~{est_updates:,}")
+    print(f"  Estimated runtime: ~{est_calls * 0.5 / 60:.0f}-{est_calls * 1.0 / 60:.0f} minutes")
     print("=" * 78)
 
-    client = SpliceScanClient(base_url=args.base_url, timeout=30)
+    client = SpliceScanClient(base_url=args.base_url, timeout=60)
 
     # Health check
     print("\nChecking API health...")
@@ -792,6 +893,7 @@ def main():
 
     all_results = []
     start_time = time.time()
+    windows_done = 0
 
     for mig_id in migrations:
         points = SAMPLE_POINTS.get(mig_id, [("start", "1970-01-01T00:00:00Z")])
@@ -801,7 +903,10 @@ def main():
         print(f"{'═'*60}")
 
         for label, after_rt in points:
-            print(f"\n  [{label}] after_record_time={after_rt}")
+            windows_done += 1
+            elapsed = time.time() - start_time
+            print(f"\n  [{label}] after_record_time={after_rt}  "
+                  f"(window {windows_done}/{total_points}, {elapsed:.0f}s elapsed)")
 
             updates = fetch_sample(
                 client, mig_id, after_rt,
@@ -816,14 +921,18 @@ def main():
             if result.updates_count > 0:
                 earliest = result.time_range["earliest"][:19] if result.time_range["earliest"] else "N/A"
                 latest = result.time_range["latest"][:19] if result.time_range["latest"] else "N/A"
-                print(f"    → {result.updates_count} updates, {result.events_count} events")
-                print(f"    → time: {earliest} → {latest}")
-                print(f"    → templates: {len(result.template_counts)} unique")
+                print(f"    -> {result.updates_count} updates, {result.events_count} events "
+                      f"({result.updates_with_events} w/ events, {result.updates_without_events} w/o)")
+                print(f"    -> time: {earliest} -> {latest}")
+                print(f"    -> templates: {len(result.template_counts)} unique")
+                if result.template_counts:
+                    top = ", ".join(f"{tid}({c})" for tid, c in result.template_counts.most_common(3))
+                    print(f"    -> top: {top}")
             else:
-                print(f"    → No data (migration may not have started at this time)")
+                print(f"    -> No data (migration may not have started/ended at this time)")
 
     elapsed = time.time() - start_time
-    print(f"\n\nSampling complete in {elapsed:.1f}s")
+    print(f"\n\nSampling complete in {elapsed:.1f}s ({elapsed/60:.1f} min)")
 
     # Reports
     print_report(all_results)

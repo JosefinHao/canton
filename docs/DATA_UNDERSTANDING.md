@@ -31,18 +31,37 @@ Migrations 0-2 are relatively short. Migrations 3 and 4 contain the bulk of the 
 
 ### Primary Data Source: Scan API
 The Splice Network Scan API (`/v2/updates`) is the canonical source for on-chain data.
-Each update contains:
+
+**IMPORTANT — /v2/updates returns a flat structure**: `root_event_ids` and `events_by_id`
+are top-level fields on each transaction, NOT nested under an `"update"` wrapper.
+This differs from `/v0/events` which uses a `{"update": {...}, "verdict": {...}}` wrapper.
 
 ```
-Update
-├── update_id          (unique identifier, hex-encoded hash)
-├── record_time        (ISO timestamp of when the update was recorded)
-├── synchronizer_id    (which synchronizer processed this)
-├── migration_id       (which migration epoch)
-└── update
-    ├── root_event_ids    (entry points into the event tree)
-    └── events_by_id      (map of event_id → event data)
+POST /v2/updates response:
+{
+  "transactions": [            ← list of flat transaction objects
+    {
+      "update_id":        str  ← unique identifier, hex-encoded hash
+      "record_time":      str  ← ISO timestamp
+      "synchronizer_id":  str  ← which synchronizer processed this
+      "migration_id":     int  ← which migration epoch (0-4)
+      "effective_at":     str  ← effective timestamp
+      "root_event_ids":   [str, ...]    ← entry points into the event tree
+      "events_by_id":     {str: {...}}  ← map of event_id → event data
+      "trace_context":    {...}         ← optional tracing metadata
+    },
+    ...
+  ]
+}
 ```
+
+The Python client (`SpliceScanClient.get_updates()`) normalizes `"transactions"` to
+`"updates"` for backward compatibility, so callers access `resp["updates"]`.
+
+**Event format within events_by_id**: Events use a **flat** structure where
+`template_id`, `create_arguments`, `choice`, `choice_argument`, `child_event_ids`
+etc. are direct fields on each event object. Event type is determined by which
+fields are present (e.g. `create_arguments` → created, `choice` → exercised).
 
 ---
 
