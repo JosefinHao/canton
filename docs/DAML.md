@@ -408,7 +408,7 @@ A **Participant Node** (also called a Validator) is:
 
 * Connects to one or more Synchronizers to participate in transactions
 
-**Critical implication**: Unlike other blockchains with a single global RPC endpoint, in Canton **you must connect to the specific validator that hosts a party** to read their data. There is no all-encompassing data source. (Exception: the Scan API provides data visible to Super Validators.)
+**Critical implication**: Unlike other blockchains with a single global RPC endpoint, in Canton **applications must connect to the specific validator that hosts a party** to read that party's data. There is no all-encompassing data source. (Exception: the Scan API provides data visible to Super Validators.)
 
 **Party hosting types**:
 
@@ -776,9 +776,9 @@ Key architectural principle: **Daml models are the privacy boundary**. When desi
 
 | Data type | How to read it |
 | :---- | :---- |
-| Your parties' private contracts | Ledger API on your own validator node |
+| A party's private contracts | Ledger API on the validator node hosting that party |
 | Global Synchronizer public data (CC transactions, rounds, governance) | Scan API (any SV's scan endpoint) |
-| Another party's contracts | That party must make you an observer, OR you query their validator's Ledger API with appropriate authorization |
+| Another party's contracts | That party must add the querying party as an observer, or the querying party must have authorization to access their validator's Ledger API |
 
 ---
 
@@ -790,7 +790,7 @@ Key architectural principle: **Daml models are the privacy boundary**. When desi
 
 * Balance on-ledger vs. off-ledger: put only what needs multi-party consensus on-chain; keep high-frequency reads off-chain
 
-* Privacy by design: every observer you add is data you're sharing; every signatory you add is a party who can block creation
+* Privacy by design: every observer added is data being shared; every signatory added is a party who can block creation
 
 * Consider performance: every transaction goes through the 2PC protocol; batch where possible
 
@@ -834,7 +834,7 @@ Think of the Canton Network as a **global network of private databases** that ca
 
 * **Daml** \= the language for defining shared state (templates) and allowed state transitions (choices), with built-in authorization and privacy rules
 
-* **Participant/Validator** \= your private database \+ smart contract executor
+* **Participant/Validator** \= a private database \+ smart contract executor per entity
 
 * **Synchronizer** \= the traffic controller that orders and timestamps transactions atomically (blind to content)
 
@@ -844,7 +844,7 @@ Think of the Canton Network as a **global network of private databases** that ca
 
 * **CIP-56** \= the standard making all Canton tokens interoperable (like ERC-20 but with institutional privacy and compliance)
 
-* **Scan API** \= the public read API for Global Synchronizer data (the analytics data source for your project)
+* **Scan API** \= the public read API for Global Synchronizer data
 
 The key difference from traditional blockchains: **validators have state** (they're not interchangeable); **privacy is first-class** (not bolted on); **atomicity spans organizations** (2PC not gossip); and **the ledger is virtual** (no single node has everything).
 
