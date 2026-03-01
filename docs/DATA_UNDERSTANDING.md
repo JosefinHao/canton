@@ -6,7 +6,8 @@ This document captures our evolving understanding of Canton on-chain data struct
 transaction types, and patterns. It is a living document that will grow as we explore
 the data more deeply.
 
-**Status**: Initial exploration phase — foundation established, deep-dive ongoing.
+**Status**: Exploration phase — initial sampling complete (165K updates, 1.37M events).
+Traffic purchase deep-dive pending.
 
 ---
 
@@ -134,7 +135,16 @@ exercised: Splice.AmuletRules:AmuletRules [AmuletRules_Transfer]
 
 ## 3. Transaction Type Catalog
 
-### Category Map
+### Template ID Format
+
+**IMPORTANT**: Template IDs from the API include a **package hash prefix**:
+```
+3ca1343ab26b453d38c8adb70dca5f1ead8440c42b59b68f070786955cbf9ec1:Splice.Amulet:Amulet
+```
+The bare template name is the last two colon-separated parts: `Splice.Amulet:Amulet`.
+When matching templates, use suffix/endswith matching, not exact equality.
+
+### Category Map (Confirmed by Sampling)
 
 | Category | Key Templates | Key Choices | Description |
 |----------|--------------|-------------|-------------|
@@ -142,9 +152,57 @@ exercised: Splice.AmuletRules:AmuletRules [AmuletRules_Transfer]
 | **Traffic Purchases** | `Splice.DecentralizedSynchronizer:MemberTraffic` | `AmuletRules_BuyMemberTraffic` | Buying synchronizer bandwidth |
 | **Mining Rounds** | `Splice.Round:OpenMiningRound`, `IssuingMiningRound`, `ClosedMiningRound`, `SummarizingMiningRound` | — | Round lifecycle (~10 min intervals) |
 | **Rewards** | `Splice.Amulet:AppRewardCoupon`, `ValidatorRewardCoupon`, `ValidatorFaucetCoupon`, `SvRewardCoupon` | — | Reward coupons for network participants |
+| **Featured Apps** | `Splice.Amulet:FeaturedAppRight`, `FeaturedAppActivityMarker` | `FeaturedAppRight_CreateActivityMarker` | Featured app rights and activity tracking (dominant in M3/M4) |
+| **Transfer Infrastructure** | `TransferPreapproval`, `TransferFactory`, `AmuletAllocation`, `AmuletTransferInstruction` | `TransferPreapproval_Send`, `TransferFactory_Transfer` | Preapprovals, factories, allocations |
 | **Validators** | `Splice.ValidatorLicense:ValidatorLicense`, `Splice.Validator:ValidatorRight` | — | Validator onboarding/licensing |
+| **Validator Liveness** | `ValidatorLivenessActivityRecord`, `UnclaimedDevelopmentFundCoupon` | — | Liveness tracking, dev fund (new in M3/M4) |
 | **Governance** | `Splice.DsoRules:VoteRequest`, `DsoRules:Vote`, `DsoRules:DsoRules`, `DsoRules:Confirmation` | — | DSO voting and governance |
 | **Name Service** | `Splice.Ans:AnsEntry`, `Splice.AnsRules:AnsRules` | — | Amulet Name Service registrations |
+| **External Party** | `Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules` | — | External party CC access (new in M3/M4) |
+| **Wallet & Subscriptions** | `Splice.Wallet.Subscriptions:SubscriptionIdleState` | — | Wallet installs and subscriptions |
+| **Batched Markers** | `Splice.Util.BatchedMarkers:BatchedMarkersProxy` | — | Efficient multi-party batch operations |
+
+### Sampling Results Summary (from `explore_transaction_types.py`)
+
+Run: 33 sample windows across migrations 0-4, 10 pages/window, 500 updates/page.
+
+| Metric | Value |
+|--------|-------|
+| Total updates sampled | 165,000 |
+| Total events sampled | 1,374,349 |
+| Unique template IDs | 210 |
+| Unique choices | 453 |
+| Unique package names | 5 |
+
+**Package names**: `splice-amulet` (~90%+), `splice-dso-governance`, `splice-util-batched-markers`,
+`splice-amulet-name-service`, `splice-wallet-payments`.
+
+**Event density growth over time**:
+- Migration 0 early: ~3 events/update
+- Migration 3 late: ~14.7 events/update
+- Migration 4 recent: ~18 events/update
+
+**Top choices by frequency**: Archive (most common), AmuletRules_Transfer,
+FeaturedAppRight_CreateActivityMarker, TransferPreapproval_Send, TransferFactory_Transfer.
+
+### Templates New in Migrations 3-4
+
+These templates were **not observed** in migrations 0-2 samples:
+- `ExternalPartyAmuletRules` — External party access to CC
+- `TransferPreapproval` — Pre-approved transfer workflows
+- `ValidatorLivenessActivityRecord` — Validator liveness tracking
+- `FeaturedAppActivityMarker` — Featured app activity markers (becomes dominant)
+- `FeaturedAppRight` — Featured app rights management
+- `AmuletAllocation` — CC allocations
+- `BatchedMarkersProxy` — Batched operations
+- `AmuletTransferInstruction` — Transfer instructions
+- `UnclaimedDevelopmentFundCoupon` — Development fund coupons
+
+### Schema Evolution Detected
+
+11 template×choice combinations showed field differences across migrations,
+indicating contract version changes at migration boundaries. This is expected
+as migrations upgrade the Splice contract packages.
 
 ### Identifying Transaction Type from Events
 A single update (transaction) can contain multiple event types. The **root exercised
@@ -153,6 +211,8 @@ event's template and choice** typically defines the transaction's primary type:
 - Root choice = `AmuletRules_Transfer` → CC transfer
 - Root choice = `AmuletRules_BuyMemberTraffic` → Traffic purchase
 - Root choice = `AmuletRules_Mint` → CC minting
+- Root choice = `FeaturedAppRight_CreateActivityMarker` → Featured app activity
+- Root choice = `TransferPreapproval_Send` → Pre-approved transfer
 - Root template = `Splice.Round:*` → Mining round lifecycle event
 - Root template = `Splice.DsoRules:*` → Governance action
 
@@ -284,13 +344,24 @@ Once sampling establishes the template/choice landscape:
   `Splice.DecentralizedSynchronizer:MemberTraffic`, and more (see investigation doc for full list).
 - Events 0-2 may have different package versions than events in migrations 3-4.
 
+### Answered Questions
+- [x] Are there templates appearing in only one migration? **Yes** — 9+ templates
+      are exclusive to M3/M4 (FeaturedAppActivityMarker, TransferPreapproval, etc.)
+- [x] Does the transaction mix evolve over time? **Yes** — event density grows from
+      ~3/update (M0) to ~18/update (M4). FeaturedAppActivityMarker becomes dominant.
+- [x] Do payload fields differ across migrations? **Yes** — 11 template×choice
+      combinations show schema evolution.
+
 ### Open Questions
 - [ ] What is the exact payload structure of `AmuletRules_BuyMemberTraffic`
       choice_argument? (Run `explore_traffic_purchase.py` to confirm)
 - [ ] Do traffic purchase event trees differ across migrations? (Schema evolution)
 - [ ] What fraction of updates are traffic purchases vs. transfers vs. minting?
-- [ ] Are there templates appearing in only one migration? (Migration-specific contracts)
+      (Sampling gives estimates; BigQuery needed for exact counts)
 - [ ] What do the `interface_id` fields contain and when are they present?
+- [ ] What drives the 6x growth in events/update from M0 to M4?
+- [ ] How do the new M3/M4 templates (TransferPreapproval, FeaturedAppActivityMarker)
+      interact with the existing transfer and rewards system?
 
 ---
 
