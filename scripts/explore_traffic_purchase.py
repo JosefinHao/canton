@@ -161,6 +161,15 @@ def get_template_id(edata: dict) -> str:
     return str(tid) if tid else "unknown"
 
 
+def template_matches(full_tid: str, bare_name: str) -> bool:
+    """Check if a full template ID (with package hash prefix) matches a bare name.
+
+    Full IDs: '3ca1343...cbf9ec1:Splice.AmuletRules:AmuletRules'
+    Bare name: 'Splice.AmuletRules:AmuletRules'
+    """
+    return full_tid.endswith(bare_name)
+
+
 def traverse(eid, events_by_id, depth=0):
     event = events_by_id.get(eid)
     if not event:
@@ -290,7 +299,7 @@ class TrafficPurchaseFindings:
                 update_choices.add((tid, choice))
 
             # Found a traffic purchase exercise
-            if tid == TRAFFIC_TEMPLATE and choice == TRAFFIC_CHOICE:
+            if template_matches(tid, TRAFFIC_TEMPLATE) and choice == TRAFFIC_CHOICE:
                 has_traffic_purchase = True
                 self.migrations_seen.add(migration_id)
 
@@ -323,7 +332,7 @@ class TrafficPurchaseFindings:
                     self.acting_parties[p] += 1
 
             # Found MemberTraffic created
-            if tid == MEMBER_TRAFFIC_TEMPLATE and etype == "created":
+            if template_matches(tid, MEMBER_TRAFFIC_TEMPLATE) and etype == "created":
                 ca = edata.get("create_arguments", {})
                 if len(self.member_traffic_events) < 50:
                     self.member_traffic_events.append({
@@ -346,7 +355,7 @@ class TrafficPurchaseFindings:
 
             # Track co-occurring templates/choices
             for tid in update_templates:
-                if tid != TRAFFIC_TEMPLATE:
+                if not template_matches(tid, TRAFFIC_TEMPLATE):
                     self.co_occurring_templates[tid] += 1
             for tid, ch in update_choices:
                 if ch != TRAFFIC_CHOICE:

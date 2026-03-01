@@ -188,6 +188,26 @@ def get_template_id(event_data: dict) -> str:
     return str(tid) if tid else "unknown"
 
 
+def bare_template_name(full_tid: str) -> str:
+    """Extract the bare template name from a full template ID.
+
+    Full template IDs from the API include a package hash prefix:
+      '3ca1343ab26b453d...cbf9ec1:Splice.Amulet:Amulet'
+    This returns just:
+      'Splice.Amulet:Amulet'
+    """
+    parts = full_tid.split(":")
+    # Bare name is Module:Entity (last two colon-separated parts)
+    if len(parts) >= 3:
+        return f"{parts[-2]}:{parts[-1]}"
+    return full_tid
+
+
+def template_matches(full_tid: str, bare_name: str) -> bool:
+    """Check if a full template ID matches a bare template name."""
+    return full_tid.endswith(bare_name)
+
+
 def traverse_tree(event_id: str, events_by_id: dict, depth: int = 0):
     """Preorder traversal yielding (event_id, event, depth)."""
     event = events_by_id.get(event_id)
@@ -711,33 +731,104 @@ def print_categorization(all_results: List[SampleResult]):
             "choices": [("Splice.AmuletRules:AmuletRules", "AmuletRules_Mint")],
             "desc": "CC token minting/issuance at round close",
         },
+        "Featured Apps": {
+            "templates": [
+                "Splice.Amulet:FeaturedAppRight",
+                "Splice.Amulet:FeaturedAppActivityMarker",
+            ],
+            "desc": "Featured app rights and activity tracking",
+        },
+        "Transfer Infrastructure": {
+            "templates": [
+                "Splice.Wallet.TransferPreapproval:TransferPreapproval",
+                "Splice.AmuletRules:TransferFactory",
+                "Splice.Amulet:AmuletAllocation",
+                "Splice.Amulet:AmuletTransferInstruction",
+            ],
+            "desc": "Transfer preapprovals, factories, allocations, and instructions",
+        },
+        "External Party": {
+            "templates": [
+                "Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules",
+            ],
+            "desc": "External party rules for CC access",
+        },
+        "Wallet & Subscriptions": {
+            "templates": [
+                "Splice.Wallet.Subscriptions:SubscriptionIdleState",
+                "Splice.Wallet.Subscriptions:SubscriptionPayment",
+                "Splice.Wallet.Install:WalletAppInstall",
+            ],
+            "desc": "Wallet installations and subscription management",
+        },
+        "Validator Liveness": {
+            "templates": [
+                "Splice.Amulet:ValidatorLivenessActivityRecord",
+                "Splice.Amulet:UnclaimedDevelopmentFundCoupon",
+            ],
+            "desc": "Validator liveness records and development fund",
+        },
+        "Batched Markers": {
+            "templates": [
+                "Splice.Util.BatchedMarkers:BatchedMarkersProxy",
+            ],
+            "desc": "Batched marker operations for efficient multi-party updates",
+        },
     }
 
     print(f"\n{'═'*78}")
     print("  TRANSACTION TYPE CATEGORIZATION (from samples)")
     print(f"{'═'*78}")
 
+    # Build lookup helpers for matching full template IDs (with hash prefix)
+    # against bare template names used in CATEGORIES.
+    # Full IDs look like: "3ca1343...cbf9ec1:Splice.Amulet:Amulet"
+    # Bare names look like: "Splice.Amulet:Amulet"
+
+    def sum_matching_templates(bare_name: str) -> int:
+        """Sum counts for all full template IDs matching a bare name."""
+        return sum(c for tid, c in all_templates.items()
+                   if template_matches(tid, bare_name))
+
+    def sum_matching_choices(bare_name: str, choice: str) -> int:
+        """Sum counts for all (template, choice) pairs matching a bare name."""
+        return sum(c for (tid, ch), c in all_choices.items()
+                   if template_matches(tid, bare_name) and ch == choice)
+
+    def is_categorized(full_tid: str, cat_bare_names: set) -> bool:
+        """Check if a full template ID matches any bare name in the set."""
+        return any(template_matches(full_tid, bare) for bare in cat_bare_names)
+
+    all_categorized_bare = set()
+    for info in CATEGORIES.values():
+        for tid in info.get("templates", []):
+            all_categorized_bare.add(tid)
+
     categorized_templates = set()
     for cat, info in CATEGORIES.items():
         cat_count = 0
-        for tid in info.get("templates", []):
-            cat_count += all_templates.get(tid, 0)
-            categorized_templates.add(tid)
-        for tid, ch in info.get("choices", []):
-            cat_count += all_choices.get((tid, ch), 0)
+        for bare_tid in info.get("templates", []):
+            cat_count += sum_matching_templates(bare_tid)
+        for bare_tid, ch in info.get("choices", []):
+            cat_count += sum_matching_choices(bare_tid, ch)
 
         if cat_count > 0:
             pct = 100.0 * cat_count / total_events if total_events else 0
             print(f"\n  {cat}  ({cat_count:,} events, {pct:.1f}%)")
             print(f"    {info['desc']}")
-            for tid in info.get("templates", []):
-                c = all_templates.get(tid, 0)
+            for bare_tid in info.get("templates", []):
+                c = sum_matching_templates(bare_tid)
                 if c:
-                    print(f"      {tid}: {c:,}")
-            for tid, ch in info.get("choices", []):
-                c = all_choices.get((tid, ch), 0)
+                    print(f"      {bare_tid}: {c:,}")
+            for bare_tid, ch in info.get("choices", []):
+                c = sum_matching_choices(bare_tid, ch)
                 if c:
-                    print(f"      {tid} [{ch}]: {c:,}")
+                    print(f"      {bare_tid} [{ch}]: {c:,}")
+
+    # Mark all full template IDs that matched a category
+    for full_tid in all_templates:
+        if is_categorized(full_tid, all_categorized_bare):
+            categorized_templates.add(full_tid)
 
     # Uncategorized
     uncategorized = {
