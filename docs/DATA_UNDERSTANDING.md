@@ -19,71 +19,101 @@ the data more deeply.
 - Data is partitioned by `event_date`, clustered by `template_id`, `event_type`, `migration_id`
 
 ### Migrations Timeline
-| Migration | Approximate Start | Notes |
+| Migration | First Record Time | Notes |
 |-----------|------------------|-------|
-| 0 | Early network | Initial synchronizer |
-| 1 | — | Short-lived migration |
-| 2 | — | Short-lived migration |
-| 3 | 2025-06-25 | Longer running period |
-| 4 | 2025-12-10 | Current/latest migration |
+| 0 | 2024-06-24T21:08:34 | Initial synchronizer |
+| 1 | 2024-10-16T13:24:18 | Short-lived migration |
+| 2 | 2024-12-11T14:23:05 | Short-lived migration |
+| 3 | 2025-06-25T13:44:34 | Longer running period |
+| 4 | 2025-12-10T16:23:25 | Current/latest migration |
 
 Migrations 0-2 are relatively short. Migrations 3 and 4 contain the bulk of the data.
+All timestamps are from first-page sampling of each migration.
 
 ### Primary Data Source: Scan API
 The Splice Network Scan API (`/v2/updates`) is the canonical source for on-chain data.
-Each update contains:
+
+**IMPORTANT — /v2/updates returns a flat structure**: `root_event_ids` and `events_by_id`
+are top-level fields on each transaction, NOT nested under an `"update"` wrapper.
+This differs from `/v0/events` which uses a `{"update": {...}, "verdict": {...}}` wrapper.
 
 ```
-Update
-├── update_id          (unique identifier, hex-encoded hash)
-├── record_time        (ISO timestamp of when the update was recorded)
-├── synchronizer_id    (which synchronizer processed this)
-├── migration_id       (which migration epoch)
-└── update
-    ├── root_event_ids    (entry points into the event tree)
-    └── events_by_id      (map of event_id → event data)
+POST /v2/updates response:
+{
+  "transactions": [            ← list of flat transaction objects
+    {
+      "update_id":        str  ← unique identifier, hex-encoded hash
+      "record_time":      str  ← ISO timestamp
+      "synchronizer_id":  str  ← which synchronizer processed this
+      "migration_id":     int  ← which migration epoch (0-4)
+      "effective_at":     str  ← effective timestamp
+      "root_event_ids":   [str, ...]    ← entry points into the event tree
+      "events_by_id":     {str: {...}}  ← map of event_id → event data
+      "trace_context":    {...}         ← optional tracing metadata
+    },
+    ...
+  ]
+}
 ```
+
+The Python client (`SpliceScanClient.get_updates()`) normalizes `"transactions"` to
+`"updates"` for backward compatibility, so callers access `resp["updates"]`.
+
+**Event format within events_by_id**: Events use a **flat** structure where
+`template_id`, `create_arguments`, `choice`, `choice_argument`, `child_event_ids`
+etc. are direct fields on each event object. Event type is determined by which
+fields are present (e.g. `create_arguments` → created, `choice` → exercised).
 
 ---
 
 ## 2. Event Structure
 
-Every on-chain action produces an **event tree**. Events come in three types:
+Every on-chain action produces an **event tree**. Events come in three types.
 
-### Created Events
+**All events use a flat structure** in `/v2/updates` (confirmed by
+[UPDATES_VS_EVENTS_INVESTIGATION.md](./UPDATES_VS_EVENTS_INVESTIGATION.md)).
+Event type is determined by which fields are present:
+
+### Created Events (`"create_arguments" in event`)
 A new contract is instantiated on the ledger.
-```
-created:
-  template_id:       Which Daml template (e.g., Splice.Amulet:Amulet)
-  contract_id:       Unique ID for this contract instance
-  create_arguments:  The initial state/parameters of the contract
-  signatories:       Parties that must sign
-  observers:         Parties that can see the contract
-  package_name:      Daml package name
+```json
+{
+  "template_id": "Splice.Amulet:Amulet",
+  "contract_id": "00a3...",
+  "package_name": "splice-amulet",
+  "create_arguments": { ... },
+  "signatories": ["party1::..."],
+  "observers": ["party2::..."]
+}
 ```
 
-### Exercised Events
+### Exercised Events (`"choice" in event`)
 A choice is exercised on an existing contract. This is the primary mechanism
 for mutations — transferring coins, buying traffic, closing rounds, voting, etc.
-```
-exercised:
-  template_id:       Which Daml template
-  contract_id:       Which contract instance
-  choice:            The choice name (e.g., AmuletRules_BuyMemberTraffic)
-  choice_argument:   Input parameters to the choice
-  exercise_result:   Return value of the choice execution
-  acting_parties:    Who initiated the exercise
-  consuming:         Whether the contract is consumed (archived) by this exercise
-  child_event_ids:   Events caused by this exercise (creates, archives, nested exercises)
-  interface_id:      Optional interface through which the choice was exercised
+```json
+{
+  "template_id": "Splice.AmuletRules:AmuletRules",
+  "contract_id": "00b5...",
+  "choice": "AmuletRules_BuyMemberTraffic",
+  "choice_argument": { ... },
+  "exercise_result": { ... },
+  "acting_parties": ["party1::..."],
+  "consuming": true,
+  "child_event_ids": ["#1:0", "#2:0", "#3:0"],
+  "interface_id": "...",
+  "signatories": ["party1::..."],
+  "observers": []
+}
 ```
 
-### Archived Events
+### Archived Events (`event.get("archived")` is truthy)
 A contract is removed from the active contract set.
-```
-archived:
-  template_id:    Which Daml template
-  contract_id:    Which contract instance
+```json
+{
+  "template_id": "Splice.Amulet:Amulet",
+  "contract_id": "00a3...",
+  "archived": true
+}
 ```
 
 ### Tree Traversal
@@ -239,12 +269,19 @@ Once sampling establishes the template/choice landscape:
 
 ## 6. Data Quality Observations
 
-### Known Patterns (from prior investigation)
-- `/v2/updates` contains more events per update than `/v0/events` for the same
-  update ID. The difference is null-body verdicts in `/v0/events` that contain
-  only verdict metadata (accepted/rejected) without event trees.
-- Shared records between the two endpoints have identical `events_by_id` content.
+### Known Patterns (from [UPDATES_VS_EVENTS_INVESTIGATION.md](./UPDATES_VS_EVENTS_INVESTIGATION.md))
+- Transaction bodies are **byte-for-byte identical** across `/v2/updates` and
+  `/v0/events` for all shared records (verified via SHA256 hash comparison across
+  1000+ records, 3 SV nodes).
+- `/v0/events` contains **null-body records** (~40-50% of page slots) that are
+  verdict-only with no transaction body. These do not appear in `/v2/updates`.
+- `/v2/updates` is ~1.5-2x more efficient per API call due to no null-body overhead.
 - `/v2/updates` is the recommended endpoint for data ingestion.
+- Verdict metadata (finalization_time, submitting_parties, mediator_group) is
+  exclusively available through `/v0/events` but is not needed for business analytics.
+- Confirmed templates across both endpoints include: `Splice.AmuletRules:AmuletRules`,
+  `Splice.Amulet:Amulet`, `Splice.Round:OpenMiningRound`, `Splice.Amulet:ValidatorRewardCoupon`,
+  `Splice.DecentralizedSynchronizer:MemberTraffic`, and more (see investigation doc for full list).
 - Events 0-2 may have different package versions than events in migrations 3-4.
 
 ### Open Questions
@@ -275,6 +312,7 @@ Once sampling establishes the template/choice landscape:
 
 ## 8. References
 
+- [Updates vs Events Investigation](./UPDATES_VS_EVENTS_INVESTIGATION.md) — Definitive comparison of `/v2/updates` vs `/v0/events` with actual API data
 - [Transaction Types Guide](./TRANSACTION_TYPES.md)
 - [Update Tree Processing Guide](./UPDATE_TREE_PROCESSING.md)
 - [Fee Analysis and Incentives Guide](./FEE_ANALYSIS_AND_INCENTIVES_GUIDE.md)
