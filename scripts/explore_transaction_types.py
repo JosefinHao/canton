@@ -673,8 +673,12 @@ def print_categorization(all_results: List[SampleResult]):
 
     CATEGORIES = {
         "Token Operations (CC)": {
-            "templates": ["Splice.Amulet:Amulet", "Splice.AmuletRules:AmuletRules"],
-            "desc": "Canton Coin creation, transfer, burning, and rules governance",
+            "templates": [
+                "Splice.Amulet:Amulet",
+                "Splice.AmuletRules:AmuletRules",
+                "Splice.Amulet:LockedAmulet",
+            ],
+            "desc": "Canton Coin creation, transfer, burning, locking, and rules governance",
         },
         "Traffic Purchases": {
             "templates": ["Splice.DecentralizedSynchronizer:MemberTraffic"],
@@ -694,17 +698,20 @@ def print_categorization(all_results: List[SampleResult]):
             "templates": [
                 "Splice.Amulet:AppRewardCoupon",
                 "Splice.Amulet:ValidatorRewardCoupon",
-                "Splice.Amulet:ValidatorFaucetCoupon",
+                "Splice.ValidatorLicense:ValidatorFaucetCoupon",
                 "Splice.Amulet:SvRewardCoupon",
+                "Splice.Amulet:UnclaimedReward",
+                "Splice.Amulet:UnclaimedDevelopmentFundCoupon",
             ],
-            "desc": "Reward coupons for validators, apps, SVs, faucets",
+            "desc": "Reward coupons for validators, apps, SVs, faucets, unclaimed rewards",
         },
         "Validators": {
             "templates": [
                 "Splice.ValidatorLicense:ValidatorLicense",
-                "Splice.Validator:ValidatorRight",
+                "Splice.Amulet:ValidatorRight",
+                "Splice.ValidatorLicense:ValidatorLivenessActivityRecord",
             ],
-            "desc": "Validator onboarding and license management",
+            "desc": "Validator onboarding, licensing, and liveness tracking",
         },
         "Governance (DSO)": {
             "templates": [
@@ -712,16 +719,25 @@ def print_categorization(all_results: List[SampleResult]):
                 "Splice.DsoRules:Vote",
                 "Splice.DsoRules:DsoRules",
                 "Splice.DsoRules:Confirmation",
+                "Splice.DSO.SvState:SvStatusReport",
+                "Splice.DSO.SvState:SvNodeState",
+                "Splice.DSO.SvState:SvRewardState",
+                "Splice.DSO.AmuletPrice:AmuletPriceVote",
+                "Splice.SvOnboarding:SvOnboardingRequest",
+                "Splice.SvOnboarding:SvOnboardingConfirmed",
+                "Splice.DsoBootstrap:DsoBootstrap",
             ],
-            "desc": "DSO governance proposals and voting",
+            "desc": "DSO governance, voting, SV status reports, and onboarding",
         },
         "Name Service (ANS)": {
             "templates": [
                 "Splice.Ans:AnsEntry",
                 "Splice.AnsRules:AnsRules",
+                "Splice.Ans:AnsRules",
                 "Splice.Ans:AnsEntryContext",
+                "Splice.Ans.AmuletConversionRateFeed:AmuletConversionRateFeed",
             ],
-            "desc": "Amulet Name Service registrations and rules",
+            "desc": "Amulet Name Service registrations, rules, and conversion rates",
         },
         "CC Transfers": {
             "choices": [("Splice.AmuletRules:AmuletRules", "AmuletRules_Transfer")],
@@ -740,37 +756,34 @@ def print_categorization(all_results: List[SampleResult]):
         },
         "Transfer Infrastructure": {
             "templates": [
-                "Splice.Wallet.TransferPreapproval:TransferPreapproval",
+                "Splice.AmuletRules:TransferPreapproval",
                 "Splice.AmuletRules:TransferFactory",
-                "Splice.Amulet:AmuletAllocation",
-                "Splice.Amulet:AmuletTransferInstruction",
+                "Splice.AmuletAllocation:AmuletAllocation",
+                "Splice.AmuletTransferInstruction:AmuletTransferInstruction",
+                "Splice.AmuletRules:ExternalPartySetupProposal",
             ],
             "desc": "Transfer preapprovals, factories, allocations, and instructions",
         },
         "External Party": {
             "templates": [
                 "Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules",
+                "Splice.ExternalPartyAmuletRules:TransferCommand",
+                "Splice.ExternalPartyAmuletRules:TransferCommandCounter",
             ],
-            "desc": "External party rules for CC access",
+            "desc": "External party rules, transfer commands, and counters",
         },
         "Wallet & Subscriptions": {
             "templates": [
                 "Splice.Wallet.Subscriptions:SubscriptionIdleState",
                 "Splice.Wallet.Subscriptions:SubscriptionPayment",
+                "Splice.Wallet.Subscriptions:SubscriptionRequest",
                 "Splice.Wallet.Install:WalletAppInstall",
             ],
             "desc": "Wallet installations and subscription management",
         },
-        "Validator Liveness": {
-            "templates": [
-                "Splice.Amulet:ValidatorLivenessActivityRecord",
-                "Splice.Amulet:UnclaimedDevelopmentFundCoupon",
-            ],
-            "desc": "Validator liveness records and development fund",
-        },
         "Batched Markers": {
             "templates": [
-                "Splice.Util.BatchedMarkers:BatchedMarkersProxy",
+                "Splice.Util.FeaturedApp.BatchedMarkersProxy:BatchedMarkersProxy",
             ],
             "desc": "Batched marker operations for efficient multi-party updates",
         },
