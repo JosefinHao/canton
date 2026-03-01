@@ -243,7 +243,7 @@ def inventory_payload_fields(obj, path: str, store: dict, max_samples: int = 3):
     if isinstance(obj, dict):
         for key, val in obj.items():
             child_path = f"{path}.{key}" if path else key
-            entry = store[child_path]
+            entry = store.setdefault(child_path, {})
             entry["count"] = entry.get("count", 0) + 1
             if "types" not in entry:
                 entry["types"] = Counter()
