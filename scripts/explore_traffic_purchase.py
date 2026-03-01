@@ -98,25 +98,33 @@ SAMPLE_WINDOWS = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Event Utilities — handles both wrapped and flat event formats
+#  Event Utilities
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# /v2/updates can return events in two formats:
-#   Wrapped:  {"created": {"template_id": ..., "create_arguments": ...}}
-#   Flat:     {"event_type": "created_event", "template_id": ..., "create_arguments": ...}
+# Per UPDATES_VS_EVENTS_INVESTIGATION.md, /v2/updates returns events in flat format:
+#   {"template_id": "...", "create_arguments": {...}, ...}    (created event)
+#   {"template_id": "...", "choice": "...", ...}              (exercised event)
+#   {"template_id": "...", "archived": true, ...}             (archived event)
 
 def get_event_type(event: dict) -> str:
-    """Determine event type, handling both wrapped and flat formats."""
+    """Determine event type from an event object.
+
+    Flat format (what /v2/updates returns):
+      - "create_arguments" present -> created
+      - "choice" present -> exercised
+      - "archived" truthy -> archived
+    Wrapped format (fallback for /v0/events):
+      - {"created": {...}} / {"exercised": {...}} / {"archived": {...}}
+    """
+    if "create_arguments" in event:
+        return "created"
+    if "choice" in event:
+        return "exercised"
+    if event.get("archived"):
+        return "archived"
     for k in ("created", "exercised", "archived"):
         if k in event and isinstance(event[k], dict):
             return k
-    et = event.get("event_type", "")
-    if et == "created_event" or "create_arguments" in event:
-        return "created"
-    if et == "exercised_event" or "choice" in event:
-        return "exercised"
-    if et == "archived_event" or event.get("archived") is True:
-        return "archived"
     return "unknown"
 
 

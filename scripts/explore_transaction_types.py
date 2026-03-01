@@ -109,31 +109,42 @@ SAMPLE_POINTS = {
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Event Parsing Utilities — handles both wrapped and flat event formats
+#  Event Parsing Utilities
 # ═══════════════════════════════════════════════════════════════════════════════
 #
-# The /v2/updates API can return events in two formats:
-#   Wrapped:  {"created": {"template_id": ..., "create_arguments": ...}}
-#   Flat:     {"event_type": "created_event", "template_id": ..., "create_arguments": ...}
+# Per UPDATES_VS_EVENTS_INVESTIGATION.md, /v2/updates returns events in flat format:
+#   {"template_id": "...", "create_arguments": {...}, ...}    (created event)
+#   {"template_id": "...", "choice": "...", ...}              (exercised event)
+#   {"template_id": "...", "archived": true, ...}             (archived event)
 #
-# The production data_ingestion_pipeline.py uses flat access.
-# The update_tree_processor.py expects wrapped access.
-# We handle both to be robust.
+# Event type is determined by which fields are present.
+# We also handle the wrapped format ({"created": {...}}) for robustness with
+# /v0/events or future format changes.
 
 def get_event_type(event: dict) -> str:
-    """Determine event type, handling both wrapped and flat formats."""
-    # Wrapped format (old): {"created": {...}}, {"exercised": {...}}, {"archived": {...}}
+    """Determine event type from an event object.
+
+    Flat format (what /v2/updates returns):
+      - "create_arguments" present → created
+      - "choice" present → exercised
+      - "archived" truthy → archived
+
+    Wrapped format (fallback):
+      - {"created": {...}} → created
+      - {"exercised": {...}} → exercised
+      - {"archived": {...}} → archived
+    """
+    # Flat format: check presence of distinguishing fields
+    if "create_arguments" in event:
+        return "created"
+    if "choice" in event:
+        return "exercised"
+    if event.get("archived"):
+        return "archived"
+    # Wrapped format fallback
     for k in ("created", "exercised", "archived"):
         if k in event and isinstance(event[k], dict):
             return k
-    # Flat format: {"event_type": "created_event", ...} or presence of key fields
-    et = event.get("event_type", "")
-    if et == "created_event" or "create_arguments" in event:
-        return "created"
-    if et == "exercised_event" or "choice" in event:
-        return "exercised"
-    if et == "archived_event" or event.get("archived") is True:
-        return "archived"
     return "unknown"
 
 
