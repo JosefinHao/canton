@@ -144,23 +144,77 @@ exercised: Splice.AmuletRules:AmuletRules [AmuletRules_Transfer]
 The bare template name is the last two colon-separated parts: `Splice.Amulet:Amulet`.
 When matching templates, use suffix/endswith matching, not exact equality.
 
-### Category Map (Confirmed by Sampling)
+### Category Map (Analytics-Focused, Mutually Exclusive)
 
-| Category | Key Templates | Key Choices | Description |
-|----------|--------------|-------------|-------------|
-| **Token Operations** | `Splice.Amulet:Amulet`, `Splice.AmuletRules:AmuletRules` | `AmuletRules_Transfer`, `AmuletRules_Mint` | CC creation, transfer, burning |
-| **Traffic Purchases** | `Splice.DecentralizedSynchronizer:MemberTraffic` | `AmuletRules_BuyMemberTraffic` | Buying synchronizer bandwidth |
-| **Mining Rounds** | `Splice.Round:OpenMiningRound`, `IssuingMiningRound`, `ClosedMiningRound`, `SummarizingMiningRound` | — | Round lifecycle (~10 min intervals) |
-| **Rewards** | `Splice.Amulet:AppRewardCoupon`, `ValidatorRewardCoupon`, `ValidatorFaucetCoupon`, `SvRewardCoupon` | — | Reward coupons for network participants |
-| **Featured Apps** | `Splice.Amulet:FeaturedAppRight`, `FeaturedAppActivityMarker` | `FeaturedAppRight_CreateActivityMarker` | Featured app rights and activity tracking (dominant in M3/M4) |
-| **Transfer Infrastructure** | `TransferPreapproval`, `TransferFactory`, `AmuletAllocation`, `AmuletTransferInstruction` | `TransferPreapproval_Send`, `TransferFactory_Transfer` | Preapprovals, factories, allocations |
-| **Validators** | `Splice.ValidatorLicense:ValidatorLicense`, `Splice.Validator:ValidatorRight` | — | Validator onboarding/licensing |
-| **Validator Liveness** | `ValidatorLivenessActivityRecord`, `UnclaimedDevelopmentFundCoupon` | — | Liveness tracking, dev fund (new in M3/M4) |
-| **Governance** | `Splice.DsoRules:VoteRequest`, `DsoRules:Vote`, `DsoRules:DsoRules`, `DsoRules:Confirmation` | — | DSO voting and governance |
-| **Name Service** | `Splice.Ans:AnsEntry`, `Splice.AnsRules:AnsRules` | — | Amulet Name Service registrations |
-| **External Party** | `Splice.ExternalPartyAmuletRules:ExternalPartyAmuletRules` | — | External party CC access (new in M3/M4) |
-| **Wallet & Subscriptions** | `Splice.Wallet.Subscriptions:SubscriptionIdleState` | — | Wallet installs and subscriptions |
-| **Batched Markers** | `Splice.Util.BatchedMarkers:BatchedMarkersProxy` | — | Efficient multi-party batch operations |
+Categories are designed to support business analytics. Each template appears in
+exactly one category (no double-counting). Choice breakdowns within categories
+show the operation mix.
+
+**Token Economics:**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **CC Coin Contracts** | `Splice.Amulet:Amulet`, `LockedAmulet` | CC coin state changes (creates = minting/transfer outputs, archives = consumption) |
+| **AmuletRules Exercises** | `Splice.AmuletRules:AmuletRules` | Top-level token operations with choice breakdown: Transfer, Mint, BuyTraffic, etc. |
+
+**Rewards (split by recipient for economic analysis):**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **App Rewards** | `Splice.Amulet:AppRewardCoupon` | Rewards earned by featured apps for facilitating transactions |
+| **Validator Rewards** | `ValidatorRewardCoupon`, `ValidatorFaucetCoupon` | Activity-based coupons + faucet grants for validators |
+| **SV Rewards** | `Splice.Amulet:SvRewardCoupon` | Rewards for Super Validators (governance participation) |
+| **Unclaimed Rewards & Dev Fund** | `UnclaimedReward`, `UnclaimedDevelopmentFundCoupon` | Minted CC not claimed + dev fund allocations |
+
+**Featured App Ecosystem:**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **Featured App Rights** | `Splice.Amulet:FeaturedAppRight` | App registration — who holds featured app status |
+| **Featured App Activity** | `Splice.Amulet:FeaturedAppActivityMarker` | Activity markers — records of transaction facilitation (dominant in M3/M4) |
+| **Featured App Batched Markers** | `BatchedMarkersProxy` | Batched marker proxy for efficient multi-party updates |
+
+**Network Infrastructure:**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **Traffic Purchases** | `MemberTraffic` | Synchronizer bandwidth allocation ($17/MB) |
+| **Mining Rounds** | `OpenMiningRound`, `IssuingMiningRound`, `ClosedMiningRound`, `SummarizingMiningRound` | Round lifecycle (~10 min intervals) |
+
+**Validator Management:**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **Validator Licensing** | `ValidatorLicense`, `ValidatorRight` | Onboarding, licensing, rights |
+| **Validator Liveness** | `ValidatorLivenessActivityRecord` | Heartbeat/liveness tracking |
+
+**Governance:**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **DSO Governance** | `VoteRequest`, `Vote`, `DsoRules`, `Confirmation` | DSO voting and rule changes |
+| **SV Operations** | `SvStatusReport`, `SvNodeState`, `SvRewardState`, `AmuletPriceVote`, `SvOnboarding*` | SV status, price voting, onboarding |
+
+**Other:**
+
+| Category | Key Templates | Description |
+|----------|--------------|-------------|
+| **Transfer Infrastructure** | `TransferPreapproval`, `TransferFactory`, `AmuletAllocation`, `AmuletTransferInstruction` | Preapprovals, factories, allocations |
+| **External Party** | `ExternalPartyAmuletRules`, `TransferCommand`, `TransferCommandCounter` | External party CC access (new in M3/M4) |
+| **Name Service (ANS)** | `AnsEntry`, `AnsRules`, `AnsEntryContext` | Human-readable names for parties |
+| **Wallet & Subscriptions** | `SubscriptionIdleState`, `SubscriptionPayment`, `WalletAppInstall` | Wallet and subscription management |
+
+### Business Questions the Categorization Supports
+
+1. **Which featured apps are most active?** → Featured App Activity (by provider party)
+2. **How much CC reward does each app earn?** → App Rewards (by provider party)
+3. **How is minted CC distributed?** → Compare App / Validator / SV / Unclaimed Rewards
+4. **What % of rewards go unclaimed?** → Unclaimed Rewards & Dev Fund vs total
+5. **Faucet vs activity-based validator rewards?** → Validator Rewards sub-breakdown
+6. **What's the transaction type mix?** → AmuletRules Exercises choice breakdown
+7. **Is the network growing?** → Events/update density trend across migrations
+8. **How many active validators?** → Validator Licensing
+9. **External party adoption trend?** → External Party event counts over time
 
 ### Sampling Results Summary (from `explore_transaction_types.py`)
 
