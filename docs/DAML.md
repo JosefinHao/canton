@@ -1,6 +1,4 @@
-# DAML Reference Guide: Splice/Canton Ecosystem
-
-This document covers how DAML works and catalogs the core templates used in the Splice/Canton ecosystem.
+Here's a comprehensive summary of how DAML works and the templates in the Splice/Canton codebase:
 
 ## **How DAML Works**
 
@@ -220,7 +218,7 @@ A complete expense-splitting app showing full DAML patterns:
 
 * **`GroupInvite` / `AcceptedGroupInvite`** — two-step invite pattern
 
-## **Key DAML Patterns in the Splice/Canton Ecosystem**
+## **Key DAML Patterns in This Codebase**
 
 | Pattern | Example |
 | :---- | :---- |
@@ -233,9 +231,33 @@ A complete expense-splitting app showing full DAML patterns:
 | **UTXO model** | `Amulet` (created/archived per transfer leg) |
 | **Fee structures** | `SteppedRate`, `RatePerRound`, `FixedFee` in `Fees.daml` |
 
-The `template_id` field in each `/v2/updates` event will be something like `Splice.AmuletRules:AmuletRules` and the `choice` will be `AmuletRules_Transfer`, `AmuletRules_BuyMemberTraffic`, etc. — matching exactly the choices defined in the Splice DAML source.
+This maps directly onto what your `PLAN.md` is trying to analyze: the template/choice pairs you see in `/v2/updates` events are exactly these templates. The `template_id` field in each event will be something like `Splice.AmuletRules:AmuletRules` and the `choice` will be `AmuletRules_Transfer`, `AmuletRules_BuyMemberTraffic`, etc.
+
+The background agent's findings confirm everything above. The key takeaway for your project context: **your local repo is a Python analytics pipeline** — there are no `.daml` source files locally. You're consuming DAML transactions produced by the Splice/Canton Network, not writing DAML yourself.
+
+A few additions from the agent's local codebase exploration worth noting:
+
+**Your `update_tree_processor.py` already handles these 13 templates:**
+
+* `Splice.Amulet:Amulet` \+ `Splice.AmuletRules:AmuletRules`
+
+* `Splice.Round:OpenMiningRound` / `IssuingMiningRound` / `ClosedMiningRound`
+
+* `Splice.ValidatorLicense:ValidatorLicense` \+ `Splice.ValidatorRight:ValidatorRight`
+
+* `Splice.Amulet:ValidatorRewardCoupon` \+ `AppRewardCoupon`
+
+* `Splice.DsoRules:VoteRequest` / `Vote` / `DsoRules`
+
+* `Splice.Ans:AnsEntry` \+ `Splice.AnsRules:AnsRules`
+
+* `Splice.DecentralizedSynchronizer:MemberTraffic`
+
+**For your `PLAN.md` comparison work**, the templates you specifically need to verify between `/v2/updates` and `/v0/events` are all covered in the DAML source — the `(template_id, choice)` pairs like `AmuletRules / AmuletRules_Transfer` and `AmuletRules / AmuletRules_BuyMemberTraffic` correspond exactly to choices defined in `AmuletRules.daml` in the Splice repo.
 
 ---
+
+Here is a thorough, comprehensive reference of everything I learned from the Digital Asset documentation and related official sources:
 
 # **Canton Network & Daml: Complete Knowledge Base**
 
