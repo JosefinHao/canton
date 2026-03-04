@@ -78,7 +78,7 @@ def parse_effective_at(value):
 
 
 def verify_bucket(bucket_name: str, prefix: str, start_month: int = 6, start_day: int = 24):
-    """Verify all 2024 event data from the given start date."""
+    """Verify event data across all years found under *prefix*."""
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
@@ -90,28 +90,45 @@ def verify_bucket(bucket_name: str, prefix: str, start_month: int = 6, start_day
     mismatches = []  # List of (blob_name, folder_date, effective_at_date, count)
     errors = []
 
-    # Iterate over months June (6) through December (12) of 2024
-    for month in range(start_month, 13):
-        day_start = start_day if month == start_month else 1
-        # List all blobs for this month
-        month_prefix = f"{prefix}/year=2024/month={month}/"
-        blobs = list(bucket.list_blobs(prefix=month_prefix))
-        parquet_blobs = [b for b in blobs if b.name.endswith(".parquet")]
+    # Discover which year= partitions exist under this prefix
+    all_blobs = list(bucket.list_blobs(prefix=f"{prefix}/year="))
+    parquet_blobs_all = [b for b in all_blobs if b.name.endswith(".parquet")]
 
-        if not parquet_blobs:
-            print(f"  month={month}: no parquet files found")
+    # Collect unique (year, month) pairs from blob paths
+    year_months = set()
+    for blob in parquet_blobs_all:
+        folder_date = parse_folder_date(blob.name)
+        if folder_date:
+            year_months.add((folder_date[0], folder_date[1]))
+
+    if not year_months:
+        print("  No parquet files found under this prefix.")
+        return True
+
+    first_year = min(ym[0] for ym in year_months)
+
+    for year, month in sorted(year_months):
+        # Apply start filter: skip months/days before the start date in the first year
+        if year == first_year and month < start_month:
+            continue
+        day_start = start_day if (year == first_year and month == start_month) else 1
+
+        month_prefix = f"{prefix}/year={year}/month={month}/"
+        blobs = [b for b in parquet_blobs_all if b.name.startswith(month_prefix)]
+
+        if not blobs:
             continue
 
-        print(f"  month={month}: {len(parquet_blobs)} parquet file(s)")
+        print(f"  year={year} month={month}: {len(blobs)} parquet file(s)")
 
-        for blob in parquet_blobs:
+        for blob in blobs:
             folder_date = parse_folder_date(blob.name)
             if folder_date is None:
                 errors.append((blob.name, "Could not parse folder date"))
                 continue
 
-            # Skip days before start_day in the start_month
-            if month == start_month and folder_date[2] < day_start:
+            # Skip days before start_day in the start year/month
+            if folder_date[2] < day_start:
                 continue
 
             total_files += 1
@@ -234,7 +251,7 @@ def main():
         print("")
         print(f"Bucket:  {args.bucket}")
         print(f"Prefix:  {prefix}")
-        print(f"Range:   2024-{args.start_month:02d}-{args.start_day:02d} through 2024-12-31")
+        print(f"Start:   month={args.start_month:02d} day={args.start_day:02d} (all years)")
         print("-" * 70)
 
         ok = verify_bucket(args.bucket, prefix, args.start_month, args.start_day)
