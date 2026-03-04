@@ -36,6 +36,7 @@ PROJECT_ID="${GCP_PROJECT_ID:-governence-483517}"
 LOCATION="${LOCATION:-US}"
 BUCKET=""
 GCS_PREFIX="${GCS_PREFIX:-raw/backfill/events/migration=0}"
+MIGRATIONS="${MIGRATIONS:-0 1 2 3 4}"
 VERIFY_START_MONTH="${VERIFY_START_MONTH:-6}"
 VERIFY_START_DAY="${VERIFY_START_DAY:-24}"
 DRY_RUN=false
@@ -55,6 +56,7 @@ usage() {
     echo "  --bucket NAME       GCS bucket name (required)"
     echo "  --dry-run           Show commands without executing destructive ops"
     echo "  --skip-verify       Skip the GCS folder verification step"
+    echo "  --migrations M...   Migration IDs to verify (default: ${MIGRATIONS})"
     echo "  --prefix PREFIX     GCS prefix (default: ${GCS_PREFIX})"
     echo "  --start-month M     Verification start month (default: ${VERIFY_START_MONTH})"
     echo "  --start-day D       Verification start day (default: ${VERIFY_START_DAY})"
@@ -66,6 +68,10 @@ while [[ $# -gt 0 ]]; do
         --bucket)       BUCKET="$2"; shift 2 ;;
         --dry-run)      DRY_RUN=true; shift ;;
         --skip-verify)  SKIP_VERIFY=true; shift ;;
+        --migrations)   MIGRATIONS=""; shift
+                        while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                            MIGRATIONS="${MIGRATIONS} $1"; shift
+                        done ;;
         --prefix)       GCS_PREFIX="$2"; shift 2 ;;
         --start-month)  VERIFY_START_MONTH="$2"; shift 2 ;;
         --start-day)    VERIFY_START_DAY="$2"; shift 2 ;;
@@ -287,7 +293,7 @@ if [[ "${SKIP_VERIFY}" == true ]]; then
 else
     echo "  Running: python ${SCRIPTS_DIR}/verify_gcs_event_data_folders.py"
     echo "    --bucket ${BUCKET}"
-    echo "    --prefix ${GCS_PREFIX}"
+    echo "    --migrations ${MIGRATIONS}"
     echo "    --start-month ${VERIFY_START_MONTH}"
     echo "    --start-day ${VERIFY_START_DAY}"
     echo ""
@@ -295,9 +301,10 @@ else
     if [[ "${DRY_RUN}" == true ]]; then
         echo "  [DRY RUN] Would run verification script."
     else
+        # shellcheck disable=SC2086
         python "${SCRIPTS_DIR}/verify_gcs_event_data_folders.py" \
             --bucket "${BUCKET}" \
-            --prefix "${GCS_PREFIX}" \
+            --migrations ${MIGRATIONS} \
             --start-month "${VERIFY_START_MONTH}" \
             --start-day "${VERIFY_START_DAY}"
 
