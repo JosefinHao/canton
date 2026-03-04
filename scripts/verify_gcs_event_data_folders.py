@@ -8,9 +8,16 @@ Compares the UTC date from effective_at to the folder's year/month/day partition
 
 Usage:
     pip install google-cloud-storage pyarrow
+
+    # Single migration:
     python scripts/verify_gcs_event_data_folders.py \
         --bucket YOUR_BUCKET \
         --prefix raw/backfill/events/migration=0
+
+    # Multiple migrations (0 through 4):
+    python scripts/verify_gcs_event_data_folders.py \
+        --bucket YOUR_BUCKET \
+        --migrations 0 1 2 3 4
 """
 
 import argparse
@@ -195,8 +202,16 @@ def main():
     parser.add_argument("--bucket", required=True, help="GCS bucket name")
     parser.add_argument(
         "--prefix",
-        default="raw/backfill/events/migration=0",
-        help="GCS prefix before year= partition (default: raw/backfill/events/migration=0)",
+        default=None,
+        help="GCS prefix before year= partition (e.g. raw/backfill/events/migration=0)",
+    )
+    parser.add_argument(
+        "--migrations",
+        nargs="+",
+        type=int,
+        default=None,
+        help="Migration IDs to verify (e.g. --migrations 0 1 2 3 4). "
+             "Builds prefixes as raw/backfill/events/migration=<N>.",
     )
     parser.add_argument(
         "--start-month", type=int, default=6, help="Start month (default: 6 for June)"
@@ -206,13 +221,38 @@ def main():
     )
     args = parser.parse_args()
 
-    print(f"Bucket:  {args.bucket}")
-    print(f"Prefix:  {args.prefix}")
-    print(f"Range:   2024-{args.start_month:02d}-{args.start_day:02d} through 2024-12-31")
-    print("-" * 70)
+    # Build list of prefixes to verify
+    if args.migrations is not None:
+        prefixes = [f"raw/backfill/events/migration={m}" for m in args.migrations]
+    elif args.prefix is not None:
+        prefixes = [args.prefix]
+    else:
+        prefixes = ["raw/backfill/events/migration=0"]
 
-    ok = verify_bucket(args.bucket, args.prefix, args.start_month, args.start_day)
-    sys.exit(0 if ok else 1)
+    all_ok = True
+    for prefix in prefixes:
+        print("")
+        print(f"Bucket:  {args.bucket}")
+        print(f"Prefix:  {prefix}")
+        print(f"Range:   2024-{args.start_month:02d}-{args.start_day:02d} through 2024-12-31")
+        print("-" * 70)
+
+        ok = verify_bucket(args.bucket, prefix, args.start_month, args.start_day)
+        if not ok:
+            all_ok = False
+
+    if len(prefixes) > 1:
+        print("")
+        print("=" * 70)
+        print("OVERALL RESULT")
+        print("=" * 70)
+        if all_ok:
+            print("ALL migrations passed verification.")
+        else:
+            print("ONE OR MORE migrations had mismatches or errors.")
+        print("=" * 70)
+
+    sys.exit(0 if all_ok else 1)
 
 
 if __name__ == "__main__":
