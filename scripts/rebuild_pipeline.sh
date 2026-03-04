@@ -376,25 +376,43 @@ echo ""
 echo "  [OK] Historical transform complete."
 
 # ===================================================================
-# STEP 6: Set up daily scheduled queries
+# STEP 6: Set up daily scheduled queries (MANUAL — BigQuery UI)
 # ===================================================================
 step_header 6 "Set up daily scheduled queries for ongoing data"
 
-echo "  This will create two BigQuery scheduled queries:"
-echo "    1. Canton: ingest_events_from_gcs  — daily at 00:00 UTC"
-echo "    2. Canton: transform_raw_events    — daily at 01:00 UTC"
+echo "  The bq CLI has limited support for scheduled queries (cannot set"
+echo "  precise start times, cron expressions, or time zones reliably)."
+echo "  Create these manually in the BigQuery Console."
+echo ""
+echo "  Console URL:"
+echo "    https://console.cloud.google.com/bigquery/scheduled-queries?project=${PROJECT_ID}"
+echo ""
+echo "  ---------------------------------------------------------------"
+echo "  QUERY 1: Canton: ingest_events_from_gcs"
+echo "  ---------------------------------------------------------------"
+echo "    1. Click 'Create scheduled query'"
+echo "    2. Paste the contents of:"
+echo "       ${SCHEDULED_DIR}/ingest_events_from_gcs.sql"
+echo "    3. Display name:  Canton: ingest_events_from_gcs"
+echo "    4. Schedule:      Custom cron: 0 0 * * *  (daily at 00:00 UTC)"
+echo "    5. Location:      ${LOCATION}"
+echo "    6. Click 'Schedule'"
+echo ""
+echo "  ---------------------------------------------------------------"
+echo "  QUERY 2: Canton: transform_raw_events"
+echo "  ---------------------------------------------------------------"
+echo "    1. Click 'Create scheduled query'"
+echo "    2. Paste the contents of:"
+echo "       ${SCHEDULED_DIR}/transform_events.sql"
+echo "    3. Display name:  Canton: transform_raw_events"
+echo "    4. Schedule:      Custom cron: 0 1 * * *  (daily at 01:00 UTC)"
+echo "    5. Location:      ${LOCATION}"
+echo "    6. Click 'Schedule'"
+echo ""
+echo "  The 1-hour offset ensures ingest completes before transform runs."
 echo ""
 
-confirm "Set up the scheduled queries now?"
-
-if [[ "${DRY_RUN}" == true ]]; then
-    echo "  [DRY RUN] Would run: bash ${SCHEDULED_DIR}/setup_scheduled_query.sh"
-else
-    bash "${SCHEDULED_DIR}/setup_scheduled_query.sh"
-fi
-
-echo ""
-echo "  [OK] Scheduled queries created."
+read -r -p "  Press Enter once you have created both scheduled queries... "
 
 # ===================================================================
 # Summary
@@ -414,7 +432,7 @@ else
 fi
 echo "    4. Ingested all historical data from GCS into raw.events"
 echo "    5. Transformed all historical data into transformed.events_parsed"
-echo "    6. Set up daily scheduled queries for ongoing ingestion"
+echo "    6. Scheduled queries set up manually in BigQuery Console"
 echo ""
 echo "  Next steps:"
 echo "    - Monitor tomorrow's scheduled query runs in BigQuery Console"
