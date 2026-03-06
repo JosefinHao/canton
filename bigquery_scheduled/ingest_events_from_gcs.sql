@@ -2,12 +2,16 @@
 -- Schedule: Daily at 00:00 UTC
 --
 -- This query loads new event data from the GCS external table
--- (canton-bucket/raw/updates/events/) into the native raw.events table.
+-- (canton-bucket/raw/backfill/events/) into the native raw.events table.
 -- It deduplicates to prevent inserting rows that already exist.
 --
+-- Data source: /v0/events endpoint (includes verdict-only records)
+-- Parquet files use flat ARRAY<STRING> for party lists, native types for
+-- migration_id (INT64), consuming (BOOL), reassignment_counter (INT64).
+--
 -- Prerequisites:
--- - External table `raw.events_updates_external` must exist pointing
---   at gs://canton-bucket/raw/updates/events/*
+-- - External table `raw.events_external` must exist pointing
+--   at gs://canton-bucket/raw/backfill/events/*
 --
 -- How it works:
 -- 1. Scans yesterday and today from the GCS external table (partition pruning)
@@ -24,7 +28,7 @@ INSERT INTO `governence-483517.raw.events` (
     consuming, reassignment_counter, source_synchronizer,
     target_synchronizer, unassign_id, submitter,
     payload, contract_key, exercise_result, raw_event,
-    trace_context, year, month, day, event_date
+    trace_context, year, month, day, migration, event_date
 )
 SELECT
     ext.event_id, ext.update_id, ext.event_type, ext.event_type_original,
@@ -35,9 +39,9 @@ SELECT
     ext.consuming, ext.reassignment_counter, ext.source_synchronizer,
     ext.target_synchronizer, ext.unassign_id, ext.submitter,
     ext.payload, ext.contract_key, ext.exercise_result, ext.raw_event,
-    ext.trace_context, ext.year, ext.month, ext.day,
+    ext.trace_context, ext.year, ext.month, ext.day, ext.migration,
     DATE(ext.year, ext.month, ext.day) AS event_date
-FROM `governence-483517.raw.events_updates_external` ext
+FROM `governence-483517.raw.events_external` ext
 WHERE DATE(ext.year, ext.month, ext.day) >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   AND NOT EXISTS (
     SELECT 1
