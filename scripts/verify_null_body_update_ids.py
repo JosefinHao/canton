@@ -2,8 +2,13 @@
 Verify whether update_ids from null-body (verdict-only) events in /v0/events
 can be found via the /v2/updates endpoint.
 
-Hypothesis: These rejected transactions exist only in /v0/events (with verdict)
-and are NOT present in /v2/updates.
+Null-body events (update=null, verdict-only) can occur for multiple reasons:
+  - Rejected transactions (verdict_result=VERDICT_RESULT_REJECTED)
+  - Private transactions where the querying party lacks visibility into the
+    update body but still receives the verdict metadata
+
+Hypothesis: These verdict-only update_ids are NOT present in /v2/updates,
+regardless of whether they were rejected or private.
 """
 
 import json
@@ -56,19 +61,28 @@ def main():
         update_id = verdict.get("update_id", "MISSING")
         verdict_result = verdict.get("verdict_result", "?")
 
+        # Classify reason for null body
+        if verdict_result == "VERDICT_RESULT_REJECTED":
+            reason = "rejected"
+        elif verdict_result == "VERDICT_RESULT_ACCEPTED":
+            reason = "private (accepted but no update body visible)"
+        else:
+            reason = f"unknown ({verdict_result})"
+
         print(f"\n  [{i+1}] update_id: {update_id[:60]}...")
         print(f"      verdict_result: {verdict_result}")
+        print(f"      likely reason:  {reason}")
 
         time.sleep(DELAY)
         try:
             v2_resp = client.get_update_by_id(update_id)
             found = bool(v2_resp and v2_resp.get("update_id"))
             print(f"      /v2/updates lookup: FOUND  (keys: {sorted(v2_resp.keys())})")
-            results.append({"update_id": update_id, "verdict_result": verdict_result, "in_v2": True})
+            results.append({"update_id": update_id, "verdict_result": verdict_result, "reason": reason, "in_v2": True})
         except Exception as e:
             error_msg = str(e)
             print(f"      /v2/updates lookup: NOT FOUND  ({error_msg[:100]})")
-            results.append({"update_id": update_id, "verdict_result": verdict_result, "in_v2": False, "error": error_msg[:200]})
+            results.append({"update_id": update_id, "verdict_result": verdict_result, "reason": reason, "in_v2": False, "error": error_msg[:200]})
 
     # Step 3: Also verify a normal event update_id works (sanity check)
     if normal:
@@ -87,19 +101,37 @@ def main():
     # Summary
     found_count = sum(1 for r in results if r["in_v2"])
     not_found_count = sum(1 for r in results if not r["in_v2"])
+
+    # Break down by reason
+    rejected = [r for r in results if r["verdict_result"] == "VERDICT_RESULT_REJECTED"]
+    accepted = [r for r in results if r["verdict_result"] == "VERDICT_RESULT_ACCEPTED"]
+    other = [r for r in results if r not in rejected and r not in accepted]
+
     print(f"\n{'=' * 70}")
     print(f"  SUMMARY")
     print(f"{'=' * 70}")
     print(f"  Null-body update_ids checked: {len(results)}")
+    print(f"    - Rejected:                 {len(rejected)}")
+    print(f"    - Accepted (private):       {len(accepted)}")
+    if other:
+        print(f"    - Other:                    {len(other)}")
     print(f"  Found in /v2/updates:         {found_count}")
     print(f"  NOT found in /v2/updates:     {not_found_count}")
+
+    if found_count > 0:
+        found_items = [r for r in results if r["in_v2"]]
+        print(f"\n  Items FOUND in /v2/updates:")
+        for r in found_items:
+            print(f"    - {r['update_id'][:50]}... ({r['reason']})")
+
     if not_found_count == len(results):
-        print(f"\n  CONFIRMED: Rejected transactions are NOT in /v2/updates.")
-        print(f"  They only appear in /v0/events as verdict-only records.")
+        print(f"\n  CONFIRMED: All null-body update_ids are absent from /v2/updates.")
+        print(f"  Verdict-only records (rejected + private) only appear in /v0/events.")
     elif found_count == len(results):
-        print(f"\n  UNEXPECTED: All rejected update_ids were found in /v2/updates.")
+        print(f"\n  UNEXPECTED: All null-body update_ids were found in /v2/updates.")
     else:
-        print(f"\n  MIXED: Some found, some not. Needs further investigation.")
+        print(f"\n  MIXED: Some null-body update_ids found in /v2/updates, some not.")
+        print(f"  This may indicate different behavior for rejected vs private transactions.")
 
 
 if __name__ == "__main__":
