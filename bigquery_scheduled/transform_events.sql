@@ -7,9 +7,9 @@
 -- The 1-day lookback window keeps daily costs minimal (~80 GB for both stages).
 --
 -- Schema notes:
--- - Raw table uses 'recorded_at' (STRING) for timestamp, 'synchronizer_id' for domain
--- - Party arrays use nested format: {list: [{element: "party1"}, {element: "party2"}]}
--- - Parsed table converts timestamps to TIMESTAMP type and flattens arrays
+-- - Raw table stores timestamps as STRING (ISO 8601), parsed to TIMESTAMP here
+-- - Party arrays are already flat ARRAY<STRING> from parquet (no struct unwrapping needed)
+-- - JSON fields (payload, raw_event, etc.) are STRING in raw, parsed to JSON here
 
 INSERT INTO `governence-483517.transformed.events_parsed` (
     event_id,
@@ -46,6 +46,7 @@ INSERT INTO `governence-483517.transformed.events_parsed` (
     year,
     month,
     day,
+    migration,
     event_date
 )
 SELECT
@@ -66,13 +67,13 @@ SELECT
     SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', r.recorded_at) as recorded_at,
     SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', r.timestamp) as timestamp,
     SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', r.created_at_ts) as created_at_ts,
-    -- Flatten nested arrays (list[].element structure)
-    ARRAY(SELECT e.element FROM UNNEST(r.signatories.list) AS e) as signatories,
-    ARRAY(SELECT e.element FROM UNNEST(r.observers.list) AS e) as observers,
-    ARRAY(SELECT e.element FROM UNNEST(r.acting_parties.list) AS e) as acting_parties,
-    ARRAY(SELECT e.element FROM UNNEST(r.witness_parties.list) AS e) as witness_parties,
-    ARRAY(SELECT e.element FROM UNNEST(r.child_event_ids.list) AS e) as child_event_ids,
-    -- Other fields
+    -- Party arrays are already flat ARRAY<STRING> — pass through directly
+    r.signatories,
+    r.observers,
+    r.acting_parties,
+    r.witness_parties,
+    r.child_event_ids,
+    -- Other fields (already properly typed in raw)
     r.reassignment_counter,
     r.source_synchronizer,
     r.target_synchronizer,
@@ -88,6 +89,7 @@ SELECT
     r.year,
     r.month,
     r.day,
+    r.migration,
     r.event_date
 FROM `governence-483517.raw.events` r
 WHERE r.event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)

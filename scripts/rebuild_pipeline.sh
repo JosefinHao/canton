@@ -199,16 +199,16 @@ run_bq "Creating raw.events (partitioned by event_date)" \
         contract_id STRING,
         template_id STRING,
         package_name STRING,
-        migration_id STRING,
-        signatories STRUCT<list ARRAY<STRUCT<element STRING>>>,
-        observers STRUCT<list ARRAY<STRUCT<element STRING>>>,
-        acting_parties STRUCT<list ARRAY<STRUCT<element STRING>>>,
-        witness_parties STRUCT<list ARRAY<STRUCT<element STRING>>>,
-        child_event_ids STRUCT<list ARRAY<STRUCT<element STRING>>>,
+        migration_id INT64,
+        signatories ARRAY<STRING>,
+        observers ARRAY<STRING>,
+        acting_parties ARRAY<STRING>,
+        witness_parties ARRAY<STRING>,
+        child_event_ids ARRAY<STRING>,
         choice STRING,
         interface_id STRING,
-        consuming STRING,
-        reassignment_counter STRING,
+        consuming BOOL,
+        reassignment_counter INT64,
         source_synchronizer STRING,
         target_synchronizer STRING,
         unassign_id STRING,
@@ -221,9 +221,11 @@ run_bq "Creating raw.events (partitioned by event_date)" \
         year INT64,
         month INT64,
         day INT64,
+        migration INT64,
         event_date DATE
     )
-    PARTITION BY event_date;"
+    PARTITION BY event_date
+    CLUSTER BY template_id, event_type, migration_id;"
 
 # transformed.events_parsed — partitioned by event_date, clustered
 run_bq "Creating transformed.events_parsed (partitioned + clustered)" \
@@ -237,10 +239,10 @@ run_bq "Creating transformed.events_parsed (partitioned + clustered)" \
         event_type STRING,
         event_type_original STRING,
         synchronizer_id STRING,
-        migration_id STRING,
+        migration_id INT64,
         choice STRING,
         interface_id STRING,
-        consuming STRING,
+        consuming BOOL,
         effective_at TIMESTAMP,
         recorded_at TIMESTAMP,
         timestamp TIMESTAMP,
@@ -250,7 +252,7 @@ run_bq "Creating transformed.events_parsed (partitioned + clustered)" \
         acting_parties ARRAY<STRING>,
         witness_parties ARRAY<STRING>,
         child_event_ids ARRAY<STRING>,
-        reassignment_counter STRING,
+        reassignment_counter INT64,
         source_synchronizer STRING,
         target_synchronizer STRING,
         unassign_id STRING,
@@ -263,6 +265,7 @@ run_bq "Creating transformed.events_parsed (partitioned + clustered)" \
         year INT64,
         month INT64,
         day INT64,
+        migration INT64,
         event_date DATE
     )
     PARTITION BY event_date
@@ -270,12 +273,12 @@ run_bq "Creating transformed.events_parsed (partitioned + clustered)" \
 
 # Ensure external table exists
 echo ""
-echo "  Ensuring external table raw.events_updates_external exists..."
-if ! bq show "${PROJECT_ID}:raw.events_updates_external" > /dev/null 2>&1; then
-    run_bq "Creating external table raw.events_updates_external" \
+echo "  Ensuring external table raw.events_external exists..."
+if ! bq show "${PROJECT_ID}:raw.events_external" > /dev/null 2>&1; then
+    run_bq "Creating external table raw.events_external" \
         mk --table \
-        --external_table_definition="parquet=gs://${BUCKET}/raw/updates/events/*" \
-        "${PROJECT_ID}:raw.events_updates_external"
+        --external_table_definition="parquet=gs://${BUCKET}/raw/backfill/events/*" \
+        "${PROJECT_ID}:raw.events_external"
 else
     echo "  [OK] External table already exists."
 fi

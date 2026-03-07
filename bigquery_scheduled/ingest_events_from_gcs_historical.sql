@@ -5,6 +5,9 @@
 -- historical partitions are loaded.  Dedup logic is identical: rows
 -- already in raw.events are skipped.
 --
+-- Data source: /v0/events endpoint parquet files at
+-- gs://canton-bucket/raw/backfill/events/*
+--
 -- WARNING — this query reads the full external table.  Run it only for
 -- the initial historical load, then switch to the daily scheduled query
 -- (ingest_events_from_gcs.sql) which has a 1-day lookback window.
@@ -18,7 +21,7 @@ INSERT INTO `governence-483517.raw.events` (
     consuming, reassignment_counter, source_synchronizer,
     target_synchronizer, unassign_id, submitter,
     payload, contract_key, exercise_result, raw_event,
-    trace_context, year, month, day, event_date
+    trace_context, year, month, day, migration, event_date
 )
 SELECT
     ext.event_id, ext.update_id, ext.event_type, ext.event_type_original,
@@ -29,9 +32,9 @@ SELECT
     ext.consuming, ext.reassignment_counter, ext.source_synchronizer,
     ext.target_synchronizer, ext.unassign_id, ext.submitter,
     ext.payload, ext.contract_key, ext.exercise_result, ext.raw_event,
-    ext.trace_context, ext.year, ext.month, ext.day,
+    ext.trace_context, ext.year, ext.month, ext.day, ext.migration,
     DATE(ext.year, ext.month, ext.day) AS event_date
-FROM `governence-483517.raw.events_updates_external` ext
+FROM `governence-483517.raw.events_external` ext
 WHERE NOT EXISTS (
     SELECT 1
     FROM `governence-483517.raw.events` e

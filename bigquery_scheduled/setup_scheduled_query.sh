@@ -9,8 +9,8 @@
 #   - gcloud CLI installed and authenticated
 #   - BigQuery Data Transfer API enabled:
 #       gcloud services enable bigquerydatatransfer.googleapis.com --project ${PROJECT_ID}
-#   - External table raw.events_updates_external exists pointing at:
-#       gs://canton-bucket/raw/updates/events/*
+#   - External table raw.events_external exists pointing at:
+#       gs://canton-bucket/raw/backfill/events/*
 #   - Service account with roles/bigquery.dataEditor on both datasets
 #
 # Usage:
@@ -143,4 +143,4 @@ echo "  5. Time zone: UTC, Location: ${LOCATION}"
 echo "  6. Click 'Schedule'"
 echo ""
 echo "Verify external table exists:"
-echo "  bq show ${PROJECT_ID}:raw.events_updates_external"
+echo "  bq show ${PROJECT_ID}:raw.events_external"
