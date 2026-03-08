@@ -724,7 +724,21 @@ canton/
 │   ├── splice_analytics.py              # Analytics module (70+ functions)
 │   ├── splice_insights.py               # Data analytics insights & visualizations
 │   └── update_tree_processor.py         # Update tree processing
+├── bigquery_scheduled/                   # BigQuery scheduled query SQL & setup
+│   ├── ingest_events_from_gcs.sql       # Daily ingest: GCS → raw.events (yesterday+today)
+│   ├── ingest_events_from_gcs_historical.sql # One-time: full historical ingest from both GCS sources
+│   ├── transform_events.sql             # Daily transform: raw.events → events_parsed (yesterday+today)
+│   ├── transform_events_historical.sql  # One-time: full historical transform
+│   └── setup_scheduled_query.sh         # Create scheduled queries via bq CLI
 ├── scripts/
+│   ├── rebuild_pipeline.sh              # Full pipeline rebuild from scratch
+│   ├── verify_gcs_event_data_folders.py # Verify GCS folder structure integrity
+│   ├── check_null_body_records.py       # Audit null-body records across GCS parquet files
+│   ├── sample_updates_schema.py         # Sample v2/updates endpoint data structure
+│   ├── data_quality_checks.py           # Comprehensive data quality suite
+│   ├── monitor_pipeline.py              # Pipeline health monitor
+│   ├── setup_monitoring_alerts.sh       # Cloud Monitoring alert setup
+│   ├── run_ingestion.py                 # Standalone ingestion script
 │   ├── analyze_featured_app_rewards.py  # Featured app rewards CLI
 │   ├── analyze_validator_rewards.py     # Validator rewards CLI
 │   ├── check_api_status.py              # API status checker
@@ -733,6 +747,9 @@ canton/
 │   └── splice_insights.py               # Insights CLI script
 ├── docs/
 │   ├── README.md                        # This file
+│   ├── DATA_INGESTION_PIPELINE.md       # Pipeline architecture & deployment guide
+│   ├── DATA_ARCHITECTURE.md             # Data architecture overview
+│   ├── RUNBOOK.md                       # Operational runbook
 │   ├── TRANSACTION_TYPES.md             # Transaction types guide
 │   ├── FEATURED_APP_REWARDS_GUIDE.md    # Featured app rewards guide
 │   ├── VALIDATOR_REWARDS_GUIDE.md       # Validator rewards guide
