@@ -587,7 +587,7 @@ bq show governence-483517:raw.events_updates_external
 
 **Resolution:**
 
-- **If external table is missing:** The GCS-based ingestion query requires `raw.events_updates_external` (a Hive-partitioned external table pointing at `gs://canton-bucket/raw/updates/events/*`). Re-create it using the rebuild script which sets up CUSTOM Hive partitioning with the correct `year/month/day/migration` key order:
+- **If external table is missing:** The GCS-based ingestion query requires `raw.events_updates_external` (a Hive-partitioned external table pointing at `gs://canton-bucket/raw/updates/events/*`). Re-create it using the rebuild script which sets up CUSTOM Hive partitioning with the correct `migration/year/month/day` key order:
   ```bash
   # Re-create external tables with Hive partitioning
   bash scripts/rebuild_pipeline.sh --bucket canton-bucket --skip-verify --dry-run

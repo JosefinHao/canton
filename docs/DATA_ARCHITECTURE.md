@@ -33,10 +33,10 @@ This document describes the complete data architecture for the Canton on-chain d
   ┌──────────────────────────────────────────────────────────────────┐
   │             GCS: gs://canton-bucket/raw/                         │
   │                                                                  │
-  │  backfill/events/year=YYYY/month=MM/day=DD/migration=M/*.parquet │
+  │  backfill/events/migration=M/year=YYYY/month=MM/day=DD/*.parquet │
   │    (Historical: 2024 – ~March 3, 2026)                           │
   │                                                                  │
-  │  updates/events/year=YYYY/month=MM/day=DD/migration=M/*.parquet  │
+  │  updates/events/migration=M/year=YYYY/month=MM/day=DD/*.parquet  │
   │    (Ongoing: ~March 3, 2026 → present)                           │
   └──────────────────────────┬───────────────────────────────────────┘
                              │
@@ -122,14 +122,14 @@ This document describes the complete data architecture for the Canton on-chain d
   │  ┌─────────────────────────────────────────────────────────────┐ │
   │  │  External Table: raw.events_external                        │ │
   │  │  - Points to: gs://canton-bucket/raw/backfill/events/*      │ │
-  │  │  - Format: Parquet, Hive-partitioned (year/month/day/migr.) │ │
+  │  │  - Format: Parquet, Hive-partitioned (migration/year/month/day) │ │
   │  │  - Used by: historical backfill ingest only                 │ │
   │  └─────────────────────────────────────────────────────────────┘ │
   │                                                                   │
   │  ┌─────────────────────────────────────────────────────────────┐ │
   │  │  External Table: raw.events_updates_external                │ │
   │  │  - Points to: gs://canton-bucket/raw/updates/events/*       │ │
-  │  │  - Format: Parquet, Hive-partitioned (year/month/day/migr.) │ │
+  │  │  - Format: Parquet, Hive-partitioned (migration/year/month/day) │ │
   │  │  - Used by: daily ingest_events_from_gcs scheduled query    │ │
   │  └─────────────────────────────────────────────────────────────┘ │
   └───────────────────────────────────────────────────────────────────┘

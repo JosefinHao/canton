@@ -284,11 +284,11 @@ PRIMARY PIPELINE (GCS → BigQuery):
 │                    Google Cloud Storage                              │
 │                                                                     │
 │  gs://canton-bucket/raw/backfill/events/                            │
-│    year=YYYY/month=MM/day=DD/migration=M/*.parquet                  │
+│    migration=M/year=YYYY/month=MM/day=DD/*.parquet                  │
 │    (Historical: 2024 – ~March 3, 2026)                              │
 │                                                                     │
 │  gs://canton-bucket/raw/updates/events/                             │
-│    year=YYYY/month=MM/day=DD/migration=M/*.parquet                  │
+│    migration=M/year=YYYY/month=MM/day=DD/*.parquet                  │
 │    (Ongoing: ~March 3, 2026 → present)                              │
 └──────────────┬──────────────────────────────────┬───────────────────┘
                │                                  │
@@ -361,7 +361,7 @@ The pipeline automatically tries multiple Super Validator nodes until one succee
 ## Data Flow
 
 **Primary Pipeline (GCS → BigQuery):**
-1. Parquet files land in `gs://canton-bucket/raw/updates/events/` with Hive partitioning (`year=/month=/day=/migration=`)
+1. Parquet files land in `gs://canton-bucket/raw/updates/events/` with Hive partitioning (`migration=/year=/month=/day=`)
 2. **BigQuery Scheduled Query** (`ingest_events_from_gcs`) runs daily at 00:00 UTC:
    - Reads yesterday + today from the external table `raw.events_updates_external`
    - Filters on raw Hive partition columns (`year`, `month`, `day`) for file pruning (avoids full GCS scan)
@@ -454,11 +454,11 @@ Flask-based HTTP service with endpoints:
 ### External Tables (GCS)
 - **Table**: `governence-483517.raw.events_external`
   - Points to: `gs://canton-bucket/raw/backfill/events/*`
-  - Hive-partitioned: `year=/month=/day=/migration=`
+  - Hive-partitioned: `migration=/year=/month=/day=`
   - Used for: one-time historical backfill ingest
 - **Table**: `governence-483517.raw.events_updates_external`
   - Points to: `gs://canton-bucket/raw/updates/events/*`
-  - Hive-partitioned: `year=/month=/day=/migration=`
+  - Hive-partitioned: `migration=/year=/month=/day=`
   - Used for: daily scheduled ingest query
 
 ### Ingestion State Table
@@ -509,10 +509,10 @@ Two daily scheduled queries that load new events from GCS and transform them. Th
 
 **Prerequisites — External Tables with Hive Partitioning:**
 
-The ingest query requires external tables with Hive partitioning enabled. The GCS Parquet files use a `year=/month=/day=/migration=` directory structure:
+The ingest query requires external tables with Hive partitioning enabled. The GCS Parquet files use a `migration=/year=/month=/day=` directory structure:
 
 ```
-gs://canton-bucket/raw/updates/events/year=2026/month=3/day=7/migration=4/*.parquet
+gs://canton-bucket/raw/updates/events/migration=4/year=2026/month=3/day=7/*.parquet
 ```
 
 External tables are created using JSON definition files for CUSTOM Hive partitioning mode. See `scripts/rebuild_pipeline.sh` for the exact setup commands.
