@@ -285,11 +285,11 @@ PRIMARY PIPELINE (GCS → BigQuery):
 │                                                                     │
 │  gs://canton-bucket/raw/backfill/events/                            │
 │    migration=M/year=YYYY/month=MM/day=DD/*.parquet                  │
-│    (Historical: 2024 – ~March 3, 2026)                              │
+│    (Historical: 2024-06-24 – 2026-03-03)                            │
 │                                                                     │
 │  gs://canton-bucket/raw/updates/events/                             │
 │    migration=M/year=YYYY/month=MM/day=DD/*.parquet                  │
-│    (Ongoing: ~March 3, 2026 → present)                              │
+│    (Ongoing: 2026-03-03 → present)                                  │
 └──────────────┬──────────────────────────────────┬───────────────────┘
                │                                  │
                │  Hive-partitioned external tables │

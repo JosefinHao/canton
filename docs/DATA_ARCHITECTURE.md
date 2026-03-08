@@ -34,10 +34,10 @@ This document describes the complete data architecture for the Canton on-chain d
   │             GCS: gs://canton-bucket/raw/                         │
   │                                                                  │
   │  backfill/events/migration=M/year=YYYY/month=MM/day=DD/*.parquet │
-  │    (Historical: 2024 – ~March 3, 2026)                           │
+  │    (Historical: 2024-06-24 – 2026-03-03)                         │
   │                                                                  │
   │  updates/events/migration=M/year=YYYY/month=MM/day=DD/*.parquet  │
-  │    (Ongoing: ~March 3, 2026 → present)                           │
+  │    (Ongoing: 2026-03-03 → present)                               │
   └──────────────────────────┬───────────────────────────────────────┘
                              │
                     Hive-partitioned external tables:
