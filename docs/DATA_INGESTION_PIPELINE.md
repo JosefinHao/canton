@@ -134,23 +134,24 @@ gcloud compute addresses describe canton-nat-ip \
 
 ### Step 3: Data Transformation Pipeline (BigQuery Scheduled Query)
 
-**Purpose:** Transform raw STRING data in `raw.events` to properly typed data in `transformed.events_parsed`.
+**Purpose:** Transform raw data in `raw.events` to properly typed data in `transformed.events_parsed`.
 
 **Transformation Logic:**
 - Parse STRING timestamps to TIMESTAMP type
-- Convert STRING integers to INT64
-- Convert STRING booleans to BOOL
 - Parse JSON strings to JSON type
-- Handle nested array structures
+- Derive `template_name` by stripping the package hash prefix from `template_id` (needed because the hash changes across migration epochs, e.g. `"abc123:Splice.Amulet:Amulet"` → `"Splice.Amulet:Amulet"`)
+- Party arrays are already flat `ARRAY<STRING>` from Parquet ingest — passed through directly
+- `migration_id` (INT64) and `consuming` (BOOL) are already natively typed from Parquet — passed through directly
 - Add partitioning and clustering for query performance
 
 **Source Table:** `governence-483517.raw.events`
-- All fields stored as STRING for maximum flexibility
-- ~10+ TB of historical data
+- Timestamps and JSON fields stored as STRING; numeric/boolean/array fields use native Parquet types
+- Partitioned by `event_date` (DATE)
 
 **Target Table:** `governence-483517.transformed.events_parsed`
-- Properly typed fields (TIMESTAMP, INT64, BOOL, JSON)
-- Partitioned by `DATE(timestamp)`
+- Properly typed fields (TIMESTAMP, INT64, BOOL, JSON, ARRAY<STRING>)
+- Includes `template_name` (package-hash-stripped version of `template_id`)
+- Partitioned by `event_date` (DATE)
 - Clustered by `template_id`, `event_type`, `migration_id`
 
 **Scheduled Query Configuration:**
@@ -165,21 +166,25 @@ Two daily BigQuery scheduled queries run in sequence:
 | SQL File | `bigquery_scheduled/ingest_events_from_gcs.sql` | `bigquery_scheduled/transform_events.sql` |
 | Lookback | 1-day (`DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`) | 1-day (`DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`) |
 | Dedup | `NOT EXISTS` on `event_id + event_date` | `NOT EXISTS` on `event_id + event_date` |
-| Est. daily cost | ~$0.50 (~80 GB scanned) | ~$1.00 (~160 GB scanned) |
+| Est. daily scan | ~2.69 GB (compressed Parquet on GCS) | ~91.5 GB (BigQuery logical bytes) |
 
 **Key Transformations:**
 ```sql
--- Timestamp parsing
-SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', recorded_at) AS recorded_at,
+-- Timestamp parsing (STRING → TIMESTAMP)
+SAFE.PARSE_TIMESTAMP('%Y-%m-%dT%H:%M:%E*SZ', r.recorded_at) AS recorded_at,
 
--- Integer conversion
-SAFE_CAST(migration_id AS INT64) AS migration_id,
+-- JSON parsing (STRING → JSON)
+SAFE.PARSE_JSON(r.payload) AS payload,
 
--- Boolean conversion
-SAFE_CAST(consuming AS BOOL) AS consuming,
+-- Template name derivation (strip package hash prefix)
+CASE
+    WHEN r.template_id IS NOT NULL AND STRPOS(r.template_id, ':') > 0
+    THEN SUBSTR(r.template_id, STRPOS(r.template_id, ':') + 1)
+    ELSE r.template_id
+END AS template_name,
 
--- JSON parsing
-SAFE.PARSE_JSON(payload) AS payload,
+-- migration_id (INT64) and consuming (BOOL) pass through as-is from Parquet
+-- Party arrays (ARRAY<STRING>) pass through as-is from Parquet ingest
 ```
 
 **Setup Commands:**
@@ -191,8 +196,9 @@ cd bigquery_scheduled
 # Or via Console
 # 1. Go to BigQuery Console → Scheduled queries
 # 2. Create new scheduled query
-# 3. Paste transform_events.sql content
-# 4. Set schedule to "every 15 minutes"
+# 3. Paste ingest_events_from_gcs.sql content, schedule daily at 00:00 UTC
+# 4. Create another scheduled query
+# 5. Paste transform_events.sql content, schedule daily at 01:00 UTC
 ```
 
 ---
@@ -272,35 +278,64 @@ gcloud logging read "resource.type=cloud_run_revision AND textPayload:\"Trying S
 ## Architecture
 
 ```
+PRIMARY PIPELINE (GCS → BigQuery):
+
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Google Cloud Storage                              │
+│                                                                     │
+│  gs://canton-bucket/raw/backfill/events/                            │
+│    migration=M/year=YYYY/month=MM/day=DD/*.parquet                  │
+│    (Historical: 2024 – ~March 3, 2026)                              │
+│                                                                     │
+│  gs://canton-bucket/raw/updates/events/                             │
+│    migration=M/year=YYYY/month=MM/day=DD/*.parquet                  │
+│    (Ongoing: ~March 3, 2026 → present)                              │
+└──────────────┬──────────────────────────────────┬───────────────────┘
+               │                                  │
+               │  Hive-partitioned external tables │
+               ▼                                  ▼
+┌──────────────────────────┐    ┌──────────────────────────────────┐
+│  raw.events_external     │    │  raw.events_updates_external     │
+│  (backfill, read-only)   │    │  (updates, read-only)            │
+└──────────┬───────────────┘    └──────────────┬───────────────────┘
+           │                                   │
+           │  Historical ingest (one-time)     │  Daily ingest @ 00:00 UTC
+           │  reads both sources               │  yesterday + today only
+           ▼                                   ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     raw.events                                      │
+│              (native table, partitioned by event_date)              │
+│  • Flat ARRAY<STRING> party columns (from Parquet LIST flattening) │
+│  • Native INT64/BOOL types (from Parquet)                          │
+│  • Deduped on (event_id, event_date)                               │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │
+                               │  Daily transform @ 01:00 UTC
+                               │  yesterday + today only
+                               ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                 transformed.events_parsed                           │
+│              (native table, partitioned by event_date)              │
+│  • STRING timestamps → TIMESTAMP                                   │
+│  • STRING JSON → JSON (payload, raw_event, etc.)                   │
+│  • template_name derived (hash-stripped from template_id)          │
+│  • Deduped on (event_id, event_date)                               │
+└─────────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+                    Downstream analytics / queries
+
+BACKUP PIPELINE (Cloud Run → BigQuery):
+
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Cloud          │     │  Cloud Run      │     │  BigQuery       │
-│  Scheduler      │────▶│  Service        │────▶│  Tables         │
+│  Scheduler      │────▶│  Service        │────▶│  raw.events     │
 │  (every 15 min) │     │  (with VPC)     │     │                 │
 └─────────────────┘     └────────┬────────┘     └─────────────────┘
                                  │
-                    ┌────────────┴────────────┐
-                    │  VPC Connector          │
-                    │  (canton-connector)     │
-                    └────────────┬────────────┘
+                    VPC Connector → Cloud NAT → Static IP 34.132.24.144
                                  │
-                    ┌────────────┴────────────┐
-                    │  Cloud NAT              │
-                    │  Static IP: 34.132.24.144│
-                    └────────────┬────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
-              ▼                  ▼                  ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│  SV Node 1      │  │  SV Node 2      │  │  SV Node 13     │
-│  (sync.global)  │  │  (digitalasset) │  │  (sv-nodeops)   │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-              │                  │                  │
-              └──────────────────┴──────────────────┘
-                                 │
-                    ┌────────────┴────────────┐
-                    │  Canton Scan API        │
-                    │  (/v0/events endpoint)  │
-                    └─────────────────────────┘
+                    Canton Scan API (/v0/events, 13-node failover)
 ```
 
 ## MainNet SV Node URLs (Failover List)
@@ -326,10 +361,25 @@ The pipeline automatically tries multiple Super Validator nodes until one succee
 ## Data Flow
 
 **Primary Pipeline (GCS → BigQuery):**
-1. Parquet files land in `gs://canton-bucket/raw/updates/events/`
-2. **BigQuery Scheduled Query** (`ingest_events_from_gcs`) runs daily at 00:00 UTC, reading yesterday's GCS partition via the external table `raw.events_updates_external`
-3. New events are inserted into `raw.events` with dedup on `(event_id, event_date)`
-4. **BigQuery Scheduled Query** (`transform_raw_events`) runs daily at 01:00 UTC, transforming `raw.events` → `transformed.events_parsed`
+1. Parquet files land in `gs://canton-bucket/raw/updates/events/` with Hive partitioning (`migration=/year=/month=/day=`)
+2. **BigQuery Scheduled Query** (`ingest_events_from_gcs`) runs daily at 00:00 UTC:
+   - Reads yesterday + today from the external table `raw.events_updates_external`
+   - Filters on raw Hive partition columns (`year`, `month`, `day`) for file pruning (avoids full GCS scan)
+   - Flattens Parquet nested LIST arrays (`STRUCT<list ARRAY<STRUCT<element STRING>>>`) to `ARRAY<STRING>`
+   - Preserves native Parquet types: `migration_id` (INT64), `consuming` (BOOL)
+   - Dedup via `NOT EXISTS` on `(event_id, event_date)` with partition bounds on the native table
+   - **Daily scan: ~2.69 GB** (compressed Parquet)
+3. **BigQuery Scheduled Query** (`transform_raw_events`) runs daily at 01:00 UTC:
+   - Reads yesterday + today from `raw.events` (partition pruning on `event_date`)
+   - Parses STRING timestamps → TIMESTAMP, STRING JSON → JSON
+   - Derives `template_name` by stripping the package hash prefix from `template_id`
+   - Dedup via `NOT EXISTS` with partition bounds on both sides
+   - **Daily scan: ~91.5 GB** (BigQuery logical bytes)
+
+**Historical Backfill (one-time):**
+- `ingest_events_from_gcs_historical.sql` loads from BOTH GCS sources (`events_external` + `events_updates_external`) with dedup at the overlap boundary
+- `transform_events_historical.sql` transforms all historical raw events
+- `scripts/rebuild_pipeline.sh` orchestrates the full rebuild end-to-end
 
 **Backup Pipeline (Scan API → Cloud Run → BigQuery):**
 5. **Cloud Scheduler** triggers the Cloud Run service every 15 minutes (with OIDC authentication)
@@ -390,15 +440,31 @@ Flask-based HTTP service with endpoints:
 
 ### Raw Events Table
 - **Table**: `governence-483517.raw.events`
-- **Purpose**: Store raw event data from API (STRING format)
-- **Schema**: All fields as STRING for maximum flexibility
+- **Purpose**: Store raw event data ingested from GCS Parquet files
+- **Partitioning**: By `event_date` (DATE)
+- **Schema**: Timestamps and JSON fields stored as STRING; party lists as `ARRAY<STRING>` (flattened from Parquet nested LIST encoding); `migration_id` as INT64, `consuming` as BOOL (native Parquet types)
 
 ### Parsed Events Table
 - **Table**: `governence-483517.transformed.events_parsed`
-- **Purpose**: Store transformed data with proper types
-- **Partitioning**: By `DATE(timestamp)`
+- **Purpose**: Store transformed data with proper types for analytics
+- **Partitioning**: By `event_date` (DATE)
 - **Clustering**: By `template_id`, `event_type`, `migration_id`
-- **Schema**: Properly typed fields (TIMESTAMP, INT64, BOOL, ARRAY, JSON)
+- **Schema**: Properly typed fields — timestamps as TIMESTAMP, JSON fields as JSON, `template_name` derived from `template_id` (hash-stripped)
+
+### External Tables (GCS)
+- **Table**: `governence-483517.raw.events_external`
+  - Points to: `gs://canton-bucket/raw/backfill/events/*`
+  - Hive-partitioned: `migration=/year=/month=/day=`
+  - Used for: one-time historical backfill ingest
+- **Table**: `governence-483517.raw.events_updates_external`
+  - Points to: `gs://canton-bucket/raw/updates/events/*`
+  - Hive-partitioned: `migration=/year=/month=/day=`
+  - Used for: daily scheduled ingest query
+
+### Ingestion State Table
+- **Table**: `governence-483517.raw.ingestion_state`
+- **Purpose**: Track Cloud Run backup pipeline cursor (O(1) position lookup)
+- **Schema**: `table_name`, `migration_id`, `recorded_at`, `updated_at`
 
 ## Deployment Options
 
@@ -441,15 +507,36 @@ python scripts/run_ingestion.py --max-pages 50 --page-size 1000
 
 Two daily scheduled queries that load new events from GCS and transform them. This is the **primary ingestion pipeline**.
 
+**Prerequisites — External Tables with Hive Partitioning:**
+
+The ingest query requires external tables with Hive partitioning enabled. The GCS Parquet files use a `migration=/year=/month=/day=` directory structure:
+
+```
+gs://canton-bucket/raw/updates/events/migration=4/year=2026/month=3/day=7/*.parquet
+```
+
+External tables are created using JSON definition files for CUSTOM Hive partitioning mode. See `scripts/rebuild_pipeline.sh` for the exact setup commands.
+
 **Query 1: `ingest_events_from_gcs`** (Daily at 00:00 UTC)
-- Reads new parquet files from `gs://canton-bucket/raw/updates/events/` via external table
-- Inserts into `raw.events` with dedup on `event_id + event_date`
+- Reads yesterday + today from `gs://canton-bucket/raw/updates/events/` via Hive-partitioned external table
+- Filters on raw Hive partition columns (`year`, `month`, `day`) for file pruning — avoids scanning all GCS files
+- Flattens Parquet nested LIST arrays to `ARRAY<STRING>`, preserves native `INT64`/`BOOL` types
+- Dedup via `NOT EXISTS` on `(event_id, event_date)` with partition bounds
+- **Daily scan: ~2.69 GB** (compressed Parquet)
 - SQL: `bigquery_scheduled/ingest_events_from_gcs.sql`
 
 **Query 2: `transform_raw_events`** (Daily at 01:00 UTC)
-- Transforms `raw.events` → `transformed.events_parsed`
-- Parses timestamps, flattens arrays, parses JSON fields
+- Transforms `raw.events` → `transformed.events_parsed` for yesterday + today
+- Parses STRING timestamps → TIMESTAMP, STRING JSON → JSON
+- Derives `template_name` from `template_id` (strips package hash prefix)
+- Party arrays and native types pass through as-is
+- **Daily scan: ~91.5 GB** (BigQuery logical bytes)
 - SQL: `bigquery_scheduled/transform_events.sql`
+
+**Setup via CLI:**
+```bash
+bash bigquery_scheduled/setup_scheduled_query.sh
+```
 
 **Setup via Console:**
 1. Go to [BigQuery Console](https://console.cloud.google.com/bigquery?project=governence-483517)
@@ -457,7 +544,9 @@ Two daily scheduled queries that load new events from GCS and transform them. Th
 3. Click "Create scheduled query"
 4. Paste contents of `bigquery_scheduled/ingest_events_from_gcs.sql`
 5. Set schedule to daily at 00:00 UTC, location: US
-6. Repeat for `bigquery_scheduled/transform_events.sql` at 01:00 UTC
+6. Create another scheduled query
+7. Paste contents of `bigquery_scheduled/transform_events.sql`
+8. Set schedule to daily at 01:00 UTC, location: US
 
 ### Option 3: Cloud Run (Containerized) - BACKUP PIPELINE
 
@@ -805,17 +894,25 @@ The pipeline maps API fields to BigQuery columns:
 
 ## Cost Estimation
 
+**Primary pipeline (BigQuery scheduled queries — daily):**
+
+| Component | Daily Scan | Est. Daily Cost (on-demand $6.25/TB) |
+|-----------|-----------|--------------------------------------|
+| Ingest (GCS → raw.events) | ~2.69 GB (compressed Parquet) | ~$0.02 |
+| Transform (raw → parsed) | ~91.5 GB (BigQuery logical bytes) | ~$0.57 |
+| BigQuery Storage | $0.02 per GB/month | Depends on data volume |
+
+**Why ingest is so cheap:** The ingest reads compressed Parquet files from GCS via an external table. BigQuery bills on the actual file size, not uncompressed logical bytes. Hive partition pruning further limits the scan to only yesterday + today's files.
+
+**Why transform costs more:** The transform reads from native BigQuery tables, which are billed on uncompressed logical byte count (even though physical storage is much smaller). Partition pruning limits the scan to 2 days, but BigQuery's logical size per partition is larger than the Parquet equivalent.
+
+**Backup pipeline (Cloud Run — if active):**
+
 | Component | Approximate Cost |
 |-----------|-----------------|
-| Cloud Function (per invocation) | ~$0.0000004 |
+| Cloud Run (per invocation) | ~$0.0000004 |
 | Cloud Scheduler (per job/month) | $0.10 |
 | BigQuery Streaming Insert | $0.01 per 200 MB |
-| BigQuery Storage | $0.02 per GB/month |
-
-With 96 invocations/day (every 15 min):
-- Cloud Function: ~$0.001/day
-- Cloud Scheduler: $0.10/month
-- BigQuery costs depend on data volume
 
 ---
 
@@ -909,10 +1006,37 @@ This creates:
 
 ---
 
+## Historical Backfill & Rebuild
+
+A full pipeline rebuild script is available for re-ingesting all historical data from scratch:
+
+```bash
+# Full rebuild (drops tables, re-creates, ingests all history, sets up scheduled queries)
+bash scripts/rebuild_pipeline.sh --bucket canton-bucket
+
+# Dry-run (shows commands without executing destructive operations)
+bash scripts/rebuild_pipeline.sh --bucket canton-bucket --dry-run
+
+# Skip GCS folder verification
+bash scripts/rebuild_pipeline.sh --bucket canton-bucket --skip-verify
+```
+
+The rebuild script:
+1. Drops and re-creates `raw.events` and `transformed.events_parsed` with correct schema/partitioning
+2. Ensures both external tables exist with Hive partitioning
+3. Verifies GCS folder structure integrity
+4. Runs `ingest_events_from_gcs_historical.sql` (loads from both GCS sources)
+5. Runs `transform_events_historical.sql` (transforms all raw events)
+6. Sets up daily scheduled queries via `setup_scheduled_query.sh`
+
+**Key files:**
+- `scripts/rebuild_pipeline.sh` — end-to-end rebuild orchestration
+- `bigquery_scheduled/ingest_events_from_gcs_historical.sql` — full historical ingest from both GCS sources
+- `bigquery_scheduled/transform_events_historical.sql` — full historical transform
+
 ## Next Steps
 
 1. **IP Whitelisting**: Coordinate with SV operators to whitelist `34.132.24.144` for full MainNet coverage
-2. **Historical GCS backfill**: Verify all historical parquet files are processed by the BigQuery scheduled query
-3. **Analytics tables**: Build materialized views or aggregation tables for specific use cases
-4. **Data retention policy**: Define and implement a BigQuery table expiration policy for `raw.events`
-5. **Alerting integration**: Connect Cloud Monitoring alerts to PagerDuty or Slack if needed
+2. **Analytics tables**: Build materialized views or aggregation tables for specific use cases
+3. **Data retention policy**: Define and implement a BigQuery table expiration policy for `raw.events`
+4. **Alerting integration**: Connect Cloud Monitoring alerts to PagerDuty or Slack if needed

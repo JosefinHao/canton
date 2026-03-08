@@ -1,6 +1,6 @@
 # Canton On-Chain Data — Architecture Overview
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-08
 
 This document describes the complete data architecture for the Canton on-chain data platform, from raw blockchain event ingestion through transformation to analytics-ready tables.
 
@@ -31,11 +31,18 @@ This document describes the complete data architecture for the Canton on-chain d
   ═══════════════════════════════════════════════════════════════════════
 
   ┌──────────────────────────────────────────────────────────────────┐
-  │             GCS: gs://canton-bucket/raw/updates/events/          │
-  │                         (parquet files)                          │
+  │             GCS: gs://canton-bucket/raw/                         │
+  │                                                                  │
+  │  backfill/events/migration=M/year=YYYY/month=MM/day=DD/*.parquet │
+  │    (Historical: 2024 – ~March 3, 2026)                           │
+  │                                                                  │
+  │  updates/events/migration=M/year=YYYY/month=MM/day=DD/*.parquet  │
+  │    (Ongoing: ~March 3, 2026 → present)                           │
   └──────────────────────────┬───────────────────────────────────────┘
                              │
-                    External Table: raw.events_updates_external
+                    Hive-partitioned external tables:
+                    raw.events_external (backfill)
+                    raw.events_updates_external (updates)
                              │
   ┌──────────────────────────▼───────────────────────────────────────┐
   │  BigQuery Scheduled Query: Canton: ingest_events_from_gcs        │
@@ -43,8 +50,12 @@ This document describes the complete data architecture for the Canton on-chain d
   │  SQL: bigquery_scheduled/ingest_events_from_gcs.sql              │
   │                                                                  │
   │  Logic:                                                          │
-  │  - Scans yesterday's GCS external table partition                │
-  │  - NOT EXISTS dedup on (event_id, event_date)                    │
+  │  - Filters on raw Hive partition columns (year, month, day)      │
+  │    for file pruning — scans only yesterday + today (~2.69 GB)    │
+  │  - Flattens Parquet nested LIST arrays to ARRAY<STRING>          │
+  │  - Preserves native INT64/BOOL types from Parquet                │
+  │  - NOT EXISTS dedup on (event_id, event_date) with partition     │
+  │    bounds to limit native table scan to 2 partitions             │
   │  - Inserts only truly new rows into raw.events                   │
   └──────────────────────────┬───────────────────────────────────────┘
                              │
@@ -95,8 +106,9 @@ This document describes the complete data architecture for the Canton on-chain d
   │  │  Table: raw.events                                          │ │
   │  │  - ~3.6B+ rows (growing ~daily)                             │ │
   │  │  - Partitioned by event_date (DATE)                         │ │
-  │  │  - ALL fields stored as STRING for flexibility              │ │
-  │  │  - Party arrays as nested STRUCT {list: [{element}]}        │ │
+  │  │  - Timestamps & JSON fields stored as STRING                │ │
+  │  │  - Party arrays as ARRAY<STRING> (flattened from Parquet)   │ │
+  │  │  - migration_id: INT64, consuming: BOOL (native Parquet)    │ │
   │  │  - JSON fields (payload, raw_event) as STRING               │ │
   │  └─────────────────────────────────────────────────────────────┘ │
   │                                                                   │
@@ -108,10 +120,17 @@ This document describes the complete data architecture for the Canton on-chain d
   │  └─────────────────────────────────────────────────────────────┘ │
   │                                                                   │
   │  ┌─────────────────────────────────────────────────────────────┐ │
+  │  │  External Table: raw.events_external                        │ │
+  │  │  - Points to: gs://canton-bucket/raw/backfill/events/*      │ │
+  │  │  - Format: Parquet, Hive-partitioned (migration/year/month/day) │ │
+  │  │  - Used by: historical backfill ingest only                 │ │
+  │  └─────────────────────────────────────────────────────────────┘ │
+  │                                                                   │
+  │  ┌─────────────────────────────────────────────────────────────┐ │
   │  │  External Table: raw.events_updates_external                │ │
   │  │  - Points to: gs://canton-bucket/raw/updates/events/*       │ │
-  │  │  - Format: Parquet                                          │ │
-  │  │  - Used by: ingest_events_from_gcs scheduled query          │ │
+  │  │  - Format: Parquet, Hive-partitioned (migration/year/month/day) │ │
+  │  │  - Used by: daily ingest_events_from_gcs scheduled query    │ │
   │  └─────────────────────────────────────────────────────────────┘ │
   └───────────────────────────────────────────────────────────────────┘
                                    │
@@ -119,6 +138,7 @@ This document describes the complete data architecture for the Canton on-chain d
                                    │ BigQuery Scheduled Query:
                                    │ Canton: transform_raw_events
                                    │ SQL: transform_events.sql
+                                   │ (yesterday + today, ~91.5 GB scan)
                                    │
                                    ▼
   ┌───────────────────────────────────────────────────────────────────┐
@@ -130,8 +150,9 @@ This document describes the complete data architecture for the Canton on-chain d
   │  │  - Partitioned by event_date (DATE)                         │ │
   │  │  - Clustered by: template_id, event_type, migration_id      │ │
   │  │  - Timestamps: TIMESTAMP type (parsed from ISO 8601 strings)│ │
-  │  │  - Party arrays: ARRAY<STRING> (flattened from nested struct)│ │
+  │  │  - Party arrays: ARRAY<STRING> (pass-through from raw)      │ │
   │  │  - JSON fields: JSON type (parsed from STRING)              │ │
+  │  │  - template_name: derived (package hash stripped)           │ │
   │  │  - NOT EXISTS dedup on (event_id, event_date)               │ │
   │  └─────────────────────────────────────────────────────────────┘ │
   └───────────────────────────────────────────────────────────────────┘
@@ -188,13 +209,19 @@ This document describes the complete data architecture for the Canton on-chain d
 
 ## Data Flow Summary
 
-| Step | Source | Destination | Trigger | Frequency | Role |
-|------|--------|-------------|---------|-----------|------|
-| 1. GCS ingest (primary) | `gs://canton-bucket/raw/updates/events/*` | `raw.events` (INSERT) | BigQuery Scheduled Query | Daily 00:00 UTC | **PRIMARY** |
-| 2. Transformation | `raw.events` | `transformed.events_parsed` (INSERT) | BQ Scheduled Query | Daily 01:00 UTC | Primary |
-| 3. Live ingest (backup) | Canton Scan API `/v2/updates` | `raw.events` (streaming insert) | Cloud Scheduler | Every 15 min | **BACKUP** |
-| 4. Quality check | `raw.events` + `transformed.events_parsed` + Scan API | Report/alerts | Manual or cron | On demand / daily | Ops |
-| 5. Monitoring | `raw.events` + `transformed.events_parsed` + Cloud Run logs | Cloud Monitoring alerts | Cron / manual | Daily | Ops |
+| Step | Source | Destination | Trigger | Frequency | Role | Est. Scan |
+|------|--------|-------------|---------|-----------|------|-----------|
+| 1. GCS ingest (primary) | `raw.events_updates_external` (GCS Parquet) | `raw.events` (INSERT) | BigQuery Scheduled Query | Daily 00:00 UTC | **PRIMARY** | ~2.69 GB |
+| 2. Transformation | `raw.events` | `transformed.events_parsed` (INSERT) | BQ Scheduled Query | Daily 01:00 UTC | Primary | ~91.5 GB |
+| 3. Live ingest (backup) | Canton Scan API `/v2/updates` | `raw.events` (streaming insert) | Cloud Scheduler | Every 15 min | **BACKUP** | N/A |
+| 4. Quality check | `raw.events` + `transformed.events_parsed` + Scan API | Report/alerts | Manual or cron | On demand / daily | Ops | — |
+| 5. Monitoring | `raw.events` + `transformed.events_parsed` + Cloud Run logs | Cloud Monitoring alerts | Cron / manual | Daily | Ops | — |
+
+**Cost optimization techniques:**
+- **Hive partition pruning on external tables**: Filtering on raw partition columns (`year`, `month`, `day`) instead of computed `DATE()` expressions, so BigQuery skips reading irrelevant Parquet files
+- **Partition bounds on NOT EXISTS**: Adding `event_date >= DATE_SUB(...)` to both sides of dedup subqueries, limiting scans to 2 partitions instead of full tables
+- **Incremental-only daily processing**: Daily queries touch only yesterday + today
+- **Separation of historical vs. daily**: One-time backfill queries are separate files from daily queries, preventing accidental full-table scans in production
 
 ---
 
@@ -243,16 +270,16 @@ Internet → Canton MainNet SV Nodes
 | contract_id | STRING | NULLABLE | Daml contract ID |
 | template_id | STRING | NULLABLE | Daml template identifier |
 | package_name | STRING | NULLABLE | Daml package name |
-| migration_id | STRING | NULLABLE | Canton migration epoch |
-| signatories | RECORD | REPEATED | Signatory parties (nested: list[].element) |
-| observers | RECORD | REPEATED | Observer parties (nested: list[].element) |
-| acting_parties | RECORD | REPEATED | Acting parties (nested: list[].element) |
-| witness_parties | RECORD | REPEATED | Witness parties (nested: list[].element) |
-| child_event_ids | RECORD | REPEATED | Child event IDs (nested: list[].element) |
+| migration_id | INT64 | NULLABLE | Canton migration epoch (native Parquet type) |
+| signatories | STRING | REPEATED | Signatory parties (ARRAY<STRING>, flattened from Parquet LIST) |
+| observers | STRING | REPEATED | Observer parties (ARRAY<STRING>, flattened from Parquet LIST) |
+| acting_parties | STRING | REPEATED | Acting parties (ARRAY<STRING>, flattened from Parquet LIST) |
+| witness_parties | STRING | REPEATED | Witness parties (ARRAY<STRING>, flattened from Parquet LIST) |
+| child_event_ids | STRING | REPEATED | Child event IDs (ARRAY<STRING>, flattened from Parquet LIST) |
 | choice | STRING | NULLABLE | Exercised choice name |
 | interface_id | STRING | NULLABLE | Interface template ID (if exercised via interface) |
-| consuming | STRING | NULLABLE | Whether exercise is consuming (STRING "true"/"false") |
-| reassignment_counter | STRING | NULLABLE | Reassignment counter |
+| consuming | BOOL | NULLABLE | Whether exercise is consuming (native Parquet type) |
+| reassignment_counter | INT64 | NULLABLE | Reassignment counter (native Parquet type) |
 | source_synchronizer | STRING | NULLABLE | Source synchronizer (for reassignments) |
 | target_synchronizer | STRING | NULLABLE | Target synchronizer (for reassignments) |
 | unassign_id | STRING | NULLABLE | Unassignment ID |
@@ -262,19 +289,21 @@ Internet → Canton MainNet SV Nodes
 | exercise_result | STRING | NULLABLE | JSON string: exercise result |
 | raw_event | STRING | NULLABLE | Full raw event JSON |
 | trace_context | STRING | NULLABLE | Trace context JSON |
-| year | INTEGER | NULLABLE | Year component of event_date |
-| month | INTEGER | NULLABLE | Month component of event_date |
-| day | INTEGER | NULLABLE | Day component of event_date |
-| event_date | DATE | NULLABLE | Partition column |
+| year | INT64 | NULLABLE | Year component of event_date (Hive partition column) |
+| month | INT64 | NULLABLE | Month component of event_date (Hive partition column) |
+| day | INT64 | NULLABLE | Day component of event_date (Hive partition column) |
+| migration | INT64 | NULLABLE | Migration epoch (Hive partition column) |
+| event_date | DATE | NULLABLE | Partition column: DATE(year, month, day) |
 
 ### transformed.events_parsed
 
-Same columns as `raw.events` but with proper types:
-- `effective_at`, `recorded_at`, `timestamp`, `created_at_ts` → **TIMESTAMP**
-- `migration_id` → **INT64**
-- `consuming` → **BOOL**
-- `signatories`, `observers`, `acting_parties`, `witness_parties`, `child_event_ids` → **ARRAY\<STRING\>** (flattened)
-- `payload`, `contract_key`, `exercise_result`, `raw_event`, `trace_context` → **JSON**
+Same columns as `raw.events` plus `template_name`, with proper types:
+- `effective_at`, `recorded_at`, `timestamp`, `created_at_ts` → **TIMESTAMP** (parsed from ISO 8601 strings)
+- `migration_id` → **INT64** (pass-through, already native from Parquet)
+- `consuming` → **BOOL** (pass-through, already native from Parquet)
+- `signatories`, `observers`, `acting_parties`, `witness_parties`, `child_event_ids` → **ARRAY\<STRING\>** (pass-through, already flattened from Parquet)
+- `payload`, `contract_key`, `exercise_result`, `raw_event`, `trace_context` → **JSON** (parsed from STRING)
+- `template_name` → **STRING** (derived: package hash prefix stripped from `template_id`, e.g. `"abc123:Splice.Amulet:Amulet"` → `"Splice.Amulet:Amulet"`)
 
 ---
 
@@ -288,9 +317,9 @@ The **Cloud Run pipeline is the backup**: it polls the Canton Scan API every 15 
 1. The GCS pipeline provides reliable daily bulk ingestion without API dependencies.
 2. The Cloud Run pipeline ensures near-real-time data availability as a supplement and fallback.
 
-### Why use STRING for all raw.events fields?
+### Why a mixed-type schema for raw.events?
 
-Maximum schema flexibility. If the API adds a new field or changes a value format, no BigQuery schema changes are required — everything lands in `raw.events` as-is. Type conversion is deferred to the transformation step, where `SAFE.PARSE_TIMESTAMP` and `SAFE_CAST` handle failures gracefully.
+The raw table uses a pragmatic mix: timestamps and JSON fields are stored as STRING (for flexibility — if a format changes, no schema migration needed), while numeric fields (`migration_id`, `reassignment_counter`), booleans (`consuming`), and party arrays use their native Parquet types (INT64, BOOL, ARRAY<STRING>). This preserves type fidelity where Parquet provides it, while keeping STRING for fields that need parsing in the transform step (`SAFE.PARSE_TIMESTAMP`, `SAFE.PARSE_JSON`).
 
 ### Why an ingestion_state table?
 

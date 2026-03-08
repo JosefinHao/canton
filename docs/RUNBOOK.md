@@ -1,6 +1,6 @@
 # Canton Data Pipeline — Runbook
 
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-08
 
 This runbook covers the most common failure scenarios for the Canton on-chain data pipeline, with step-by-step diagnosis and resolution steps.
 
@@ -95,10 +95,11 @@ bq query --use_legacy_sql=false \
 
 | Table | Purpose |
 |-------|---------|
-| `raw.events` | Raw events from Scan API (STRING fields) |
-| `raw.ingestion_state` | Ingestion cursor tracking (fast O(1) lookup) |
-| `raw.events_updates_external` | External table pointing at GCS parquet files |
-| `transformed.events_parsed` | Type-cast events for analytics |
+| `raw.events` | Raw events from GCS Parquet ingest (mixed types: STRING timestamps/JSON, native INT64/BOOL/ARRAY) |
+| `raw.ingestion_state` | Ingestion cursor tracking for Cloud Run backup pipeline (fast O(1) lookup) |
+| `raw.events_external` | External table → `gs://canton-bucket/raw/backfill/events/*` (Hive-partitioned, historical backfill) |
+| `raw.events_updates_external` | External table → `gs://canton-bucket/raw/updates/events/*` (Hive-partitioned, daily ingest) |
+| `transformed.events_parsed` | Type-cast events for analytics (TIMESTAMP, JSON, template_name derived) |
 
 ---
 
@@ -586,12 +587,13 @@ bq show governence-483517:raw.events_updates_external
 
 **Resolution:**
 
-- **If external table is missing:** The GCS-based ingestion query requires `raw.events_updates_external` (an external table pointing at `gs://canton-bucket/raw/updates/events/*`). Re-create it:
+- **If external table is missing:** The GCS-based ingestion query requires `raw.events_updates_external` (a Hive-partitioned external table pointing at `gs://canton-bucket/raw/updates/events/*`). Re-create it using the rebuild script which sets up CUSTOM Hive partitioning with the correct `migration/year/month/day` key order:
   ```bash
-  bq mk --table \
-    --external_table_definition=parquet=gs://canton-bucket/raw/updates/events/* \
-    governence-483517:raw.events_updates_external
+  # Re-create external tables with Hive partitioning
+  bash scripts/rebuild_pipeline.sh --bucket canton-bucket --skip-verify --dry-run
+  # (review the commands, then run without --dry-run)
   ```
+  Note: Simple `bq mk --external_table_definition` will NOT enable Hive partition pruning. The external table must be created with a JSON definition file specifying CUSTOM Hive partitioning mode. See `scripts/rebuild_pipeline.sh` for the exact setup.
 - **If scheduled query is disabled:** Re-enable in BigQuery Console → Scheduled queries → Select query → Enable.
 - **If query failed due to SQL error:** Check the error message in the run history, fix the SQL in the corresponding file, and re-create the scheduled query with `setup_scheduled_query.sh`.
 - **If no new GCS files:** The GCS-based ingest query (`ingest_events_from_gcs.sql`) is the **primary production pipeline**. If no new parquet files are landing in `gs://canton-bucket/raw/updates/events/`, investigate the upstream process that produces those files. As a temporary workaround, the Cloud Run backup pipeline can be activated to ingest directly from the Scan API until GCS delivery is restored.
