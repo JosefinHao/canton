@@ -1,23 +1,23 @@
 -- BigQuery Scheduled Query: Ingest new events from GCS into raw.events
 -- Schedule: Daily at 00:00 UTC
 --
--- This query loads new event data from the GCS external table
--- (canton-bucket/raw/backfill/events/) into the native raw.events table.
+-- This query loads new event data from the GCS updates external table
+-- (canton-bucket/raw/updates/events/) into the native raw.events table.
 -- It deduplicates to prevent inserting rows that already exist.
 --
--- Data source: /v0/events endpoint (includes verdict-only records)
--- Parquet files use flat ARRAY<STRING> for party lists, native types for
--- migration_id (INT64), consuming (BOOL), reassignment_counter (INT64).
+-- Data source: raw.events_updates_external
+--   Points to: gs://canton-bucket/raw/updates/events/*
+--   Parquet files use flat ARRAY<STRING> for party lists, native types for
+--   migration_id (INT64), consuming (BOOL), reassignment_counter (INT64).
 --
 -- Prerequisites:
--- - External table `raw.events_external` must exist pointing
---   at gs://canton-bucket/raw/backfill/events/*
+-- - External table `raw.events_updates_external` must exist pointing
+--   at gs://canton-bucket/raw/updates/events/*
 --
 -- How it works:
 -- 1. Scans yesterday and today from the GCS external table (partition pruning)
 -- 2. Uses NOT EXISTS to skip rows already in raw.events (dedup on event_id + event_date)
 -- 3. Inserts only truly new rows into the native partitioned table
--- The 1-day lookback window keeps daily costs minimal (~80 GB for both stages).
 
 INSERT INTO `governence-483517.raw.events` (
     event_id, update_id, event_type, event_type_original,
@@ -41,7 +41,7 @@ SELECT
     ext.payload, ext.contract_key, ext.exercise_result, ext.raw_event,
     ext.trace_context, ext.year, ext.month, ext.day, ext.migration,
     DATE(ext.year, ext.month, ext.day) AS event_date
-FROM `governence-483517.raw.events_external` ext
+FROM `governence-483517.raw.events_updates_external` ext
 WHERE DATE(ext.year, ext.month, ext.day) >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   AND NOT EXISTS (
     SELECT 1

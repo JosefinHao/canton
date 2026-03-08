@@ -5,6 +5,9 @@
 -- historical partitions are transformed.  Dedup logic is identical:
 -- rows already in transformed.events_parsed are skipped.
 --
+-- template_name is derived from template_id by stripping the package
+-- hash prefix: "abc123:Splice.Amulet:Amulet" -> "Splice.Amulet:Amulet"
+--
 -- WARNING — this query reads the full raw.events table.  Run it only
 -- after the historical ingest is complete, then switch to the daily
 -- scheduled query (transform_events.sql) which has a 1-day lookback.
@@ -14,6 +17,7 @@ INSERT INTO `governence-483517.transformed.events_parsed` (
     update_id,
     contract_id,
     template_id,
+    template_name,
     package_name,
     event_type,
     event_type_original,
@@ -52,6 +56,14 @@ SELECT
     r.update_id,
     r.contract_id,
     r.template_id,
+    -- Extract bare template name: strip package hash prefix
+    -- "abc123:Module.Name:Entity" -> "Module.Name:Entity"
+    CASE
+        WHEN r.template_id IS NOT NULL
+             AND STRPOS(r.template_id, ':') > 0
+        THEN SUBSTR(r.template_id, STRPOS(r.template_id, ':') + 1)
+        ELSE r.template_id
+    END AS template_name,
     r.package_name,
     r.event_type,
     r.event_type_original,
