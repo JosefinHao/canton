@@ -294,12 +294,22 @@ step_header 3 "Ensure external tables exist"
 # External table for backfill data (Hive-partitioned: year=.../month=.../day=...)
 echo "  Checking raw.events_external..."
 if ! bq show "${PROJECT_ID}:raw.events_external" > /dev/null 2>&1; then
+    BACKFILL_DEF=$(mktemp /tmp/ext_def_backfill.XXXXXX.json)
+    cat > "${BACKFILL_DEF}" <<EXTDEF
+{
+  "sourceFormat": "PARQUET",
+  "sourceUris": ["gs://${BUCKET}/raw/backfill/events/*"],
+  "hivePartitioningOptions": {
+    "mode": "AUTO",
+    "sourceUriPrefix": "gs://${BUCKET}/raw/backfill/events/"
+  }
+}
+EXTDEF
     run_bq "Creating external table raw.events_external -> gs://${BUCKET}/raw/backfill/events/*" \
         mk --table \
-        --external_table_definition="@PARQUET=gs://${BUCKET}/raw/backfill/events/*" \
-        --hive_partitioning_mode=AUTO \
-        --hive_partitioning_source_uri_prefix="gs://${BUCKET}/raw/backfill/events/" \
+        --external_table_definition="${BACKFILL_DEF}" \
         "${PROJECT_ID}:raw.events_external"
+    rm -f "${BACKFILL_DEF}"
 else
     echo "  [OK] raw.events_external already exists."
 fi
@@ -307,12 +317,22 @@ fi
 # External table for updates data (Hive-partitioned: year=.../month=.../day=...)
 echo "  Checking raw.events_updates_external..."
 if ! bq show "${PROJECT_ID}:raw.events_updates_external" > /dev/null 2>&1; then
+    UPDATES_DEF=$(mktemp /tmp/ext_def_updates.XXXXXX.json)
+    cat > "${UPDATES_DEF}" <<EXTDEF
+{
+  "sourceFormat": "PARQUET",
+  "sourceUris": ["gs://${BUCKET}/raw/updates/events/*"],
+  "hivePartitioningOptions": {
+    "mode": "AUTO",
+    "sourceUriPrefix": "gs://${BUCKET}/raw/updates/events/"
+  }
+}
+EXTDEF
     run_bq "Creating external table raw.events_updates_external -> gs://${BUCKET}/raw/updates/events/*" \
         mk --table \
-        --external_table_definition="@PARQUET=gs://${BUCKET}/raw/updates/events/*" \
-        --hive_partitioning_mode=AUTO \
-        --hive_partitioning_source_uri_prefix="gs://${BUCKET}/raw/updates/events/" \
+        --external_table_definition="${UPDATES_DEF}" \
         "${PROJECT_ID}:raw.events_updates_external"
+    rm -f "${UPDATES_DEF}"
 else
     echo "  [OK] raw.events_updates_external already exists."
 fi
