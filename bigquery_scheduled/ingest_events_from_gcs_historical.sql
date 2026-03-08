@@ -2,9 +2,9 @@
 --
 -- This loads from TWO GCS sources into raw.events:
 --   1. raw.events_external         → gs://canton-bucket/raw/backfill/events/*
---      (historical backfill data from 2024 through ~March 3, 2026)
+--      (historical backfill data from 2024-06-24 through 2026-03-03)
 --   2. raw.events_updates_external → gs://canton-bucket/raw/updates/events/*
---      (ongoing updates data from ~March 3, 2026 onward)
+--      (ongoing updates data from 2026-03-03 onward)
 --
 -- Both external tables have the same parquet schema (nested LIST encoding
 -- STRUCT<list ARRAY<STRUCT<element STRING>>> for party lists, which is
@@ -21,7 +21,7 @@
 -- events_updates_external with a 1-day lookback window.
 
 -- =====================================================================
--- Part 1: Ingest from backfill (2024 – ~March 3, 2026)
+-- Part 1: Ingest from backfill (2024-06-24 – 2026-03-03)
 -- =====================================================================
 INSERT INTO `governence-483517.raw.events` (
     event_id, update_id, event_type, event_type_original,
@@ -59,7 +59,7 @@ WHERE NOT EXISTS (
 );
 
 -- =====================================================================
--- Part 2: Ingest from updates (~March 3, 2026 – present)
+-- Part 2: Ingest from updates (2026-03-03 – present)
 -- =====================================================================
 INSERT INTO `governence-483517.raw.events` (
     event_id, update_id, event_type, event_type_original,

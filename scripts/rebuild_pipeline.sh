@@ -8,9 +8,9 @@
 #
 # Data sources:
 #   - raw.events_external         → gs://BUCKET/raw/backfill/events/*
-#     (historical backfill: 2024 – ~March 3, 2026)
+#     (historical backfill: 2024-06-24 – 2026-03-03)
 #   - raw.events_updates_external → gs://BUCKET/raw/updates/events/*
-#     (ongoing updates: ~March 3, 2026 onward)
+#     (ongoing updates: 2026-03-03 onward)
 #
 # Steps:
 #   1. Delete raw.events and transformed.events_parsed tables
