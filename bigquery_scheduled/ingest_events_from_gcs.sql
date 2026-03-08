@@ -48,7 +48,16 @@ SELECT
     ext.trace_context, ext.year, ext.month, ext.day, ext.migration,
     DATE(ext.year, ext.month, ext.day) AS event_date
 FROM `governence-483517.raw.events_updates_external` ext
-WHERE DATE(ext.year, ext.month, ext.day) >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+WHERE
+  -- Filter on raw Hive partition columns so BigQuery can prune files.
+  -- DATE() wrapping prevents pruning, so we match yesterday + today explicitly.
+  (   (ext.year = EXTRACT(YEAR FROM DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+       AND ext.month = EXTRACT(MONTH FROM DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+       AND ext.day = EXTRACT(DAY FROM DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)))
+   OR (ext.year = EXTRACT(YEAR FROM CURRENT_DATE())
+       AND ext.month = EXTRACT(MONTH FROM CURRENT_DATE())
+       AND ext.day = EXTRACT(DAY FROM CURRENT_DATE()))
+  )
   AND NOT EXISTS (
     SELECT 1
     FROM `governence-483517.raw.events` e
