@@ -6,8 +6,9 @@
 --   2. raw.events_updates_external → gs://canton-bucket/raw/updates/events/*
 --      (ongoing updates data from ~March 3, 2026 onward)
 --
--- Both external tables have the same parquet schema (flat ARRAY<STRING>
--- for party lists, native INT64/BOOL for typed fields).
+-- Both external tables have the same parquet schema (nested LIST encoding
+-- STRUCT<list ARRAY<STRUCT<element STRING>>> for party lists, which is
+-- flattened to ARRAY<STRING> during ingest; native INT64/BOOL for typed fields).
 --
 -- Dedup: rows already in raw.events are skipped via NOT EXISTS on
 -- (event_id, event_date).  This also handles the overlap at the
@@ -37,8 +38,13 @@ SELECT
     ext.event_id, ext.update_id, ext.event_type, ext.event_type_original,
     ext.synchronizer_id, ext.effective_at, ext.recorded_at, ext.timestamp,
     ext.created_at_ts, ext.contract_id, ext.template_id, ext.package_name,
-    ext.migration_id, ext.signatories, ext.observers, ext.acting_parties,
-    ext.witness_parties, ext.child_event_ids, ext.choice, ext.interface_id,
+    ext.migration_id,
+    ARRAY(SELECT element FROM UNNEST(ext.signatories.list)) AS signatories,
+    ARRAY(SELECT element FROM UNNEST(ext.observers.list)) AS observers,
+    ARRAY(SELECT element FROM UNNEST(ext.acting_parties.list)) AS acting_parties,
+    ARRAY(SELECT element FROM UNNEST(ext.witness_parties.list)) AS witness_parties,
+    ARRAY(SELECT element FROM UNNEST(ext.child_event_ids.list)) AS child_event_ids,
+    ext.choice, ext.interface_id,
     ext.consuming, ext.reassignment_counter, ext.source_synchronizer,
     ext.target_synchronizer, ext.unassign_id, ext.submitter,
     ext.payload, ext.contract_key, ext.exercise_result, ext.raw_event,
@@ -70,8 +76,13 @@ SELECT
     ext.event_id, ext.update_id, ext.event_type, ext.event_type_original,
     ext.synchronizer_id, ext.effective_at, ext.recorded_at, ext.timestamp,
     ext.created_at_ts, ext.contract_id, ext.template_id, ext.package_name,
-    ext.migration_id, ext.signatories, ext.observers, ext.acting_parties,
-    ext.witness_parties, ext.child_event_ids, ext.choice, ext.interface_id,
+    ext.migration_id,
+    ARRAY(SELECT element FROM UNNEST(ext.signatories.list)) AS signatories,
+    ARRAY(SELECT element FROM UNNEST(ext.observers.list)) AS observers,
+    ARRAY(SELECT element FROM UNNEST(ext.acting_parties.list)) AS acting_parties,
+    ARRAY(SELECT element FROM UNNEST(ext.witness_parties.list)) AS witness_parties,
+    ARRAY(SELECT element FROM UNNEST(ext.child_event_ids.list)) AS child_event_ids,
+    ext.choice, ext.interface_id,
     ext.consuming, ext.reassignment_counter, ext.source_synchronizer,
     ext.target_synchronizer, ext.unassign_id, ext.submitter,
     ext.payload, ext.contract_key, ext.exercise_result, ext.raw_event,
