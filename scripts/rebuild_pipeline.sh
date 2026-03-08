@@ -291,7 +291,8 @@ echo "  [OK] Tables created."
 # ===================================================================
 step_header 3 "Ensure external tables exist"
 
-# External table for backfill data (Hive-partitioned: year=.../month=.../day=...)
+# External table for backfill data
+# Hive layout: migration=N/year=YYYY/month=MM/day=DD
 echo "  Checking raw.events_external..."
 if ! bq show "${PROJECT_ID}:raw.events_external" > /dev/null 2>&1; then
     BACKFILL_DEF=$(mktemp /tmp/ext_def_backfill.XXXXXX.json)
@@ -300,8 +301,8 @@ if ! bq show "${PROJECT_ID}:raw.events_external" > /dev/null 2>&1; then
   "sourceFormat": "PARQUET",
   "sourceUris": ["gs://${BUCKET}/raw/backfill/events/*"],
   "hivePartitioningOptions": {
-    "mode": "AUTO",
-    "sourceUriPrefix": "gs://${BUCKET}/raw/backfill/events/"
+    "mode": "CUSTOM",
+    "sourceUriPrefix": "gs://${BUCKET}/raw/backfill/events/{migration:INTEGER}/{year:INTEGER}/{month:INTEGER}/{day:INTEGER}"
   }
 }
 EXTDEF
@@ -314,7 +315,8 @@ else
     echo "  [OK] raw.events_external already exists."
 fi
 
-# External table for updates data (Hive-partitioned: year=.../month=.../day=...)
+# External table for updates data
+# Hive layout: migration=N/year=YYYY/month=MM/day=DD
 echo "  Checking raw.events_updates_external..."
 if ! bq show "${PROJECT_ID}:raw.events_updates_external" > /dev/null 2>&1; then
     UPDATES_DEF=$(mktemp /tmp/ext_def_updates.XXXXXX.json)
@@ -323,8 +325,8 @@ if ! bq show "${PROJECT_ID}:raw.events_updates_external" > /dev/null 2>&1; then
   "sourceFormat": "PARQUET",
   "sourceUris": ["gs://${BUCKET}/raw/updates/events/*"],
   "hivePartitioningOptions": {
-    "mode": "AUTO",
-    "sourceUriPrefix": "gs://${BUCKET}/raw/updates/events/"
+    "mode": "CUSTOM",
+    "sourceUriPrefix": "gs://${BUCKET}/raw/updates/events/{migration:INTEGER}/{year:INTEGER}/{month:INTEGER}/{day:INTEGER}"
   }
 }
 EXTDEF
