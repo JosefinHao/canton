@@ -109,4 +109,6 @@ WHERE r.event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
     FROM `governence-483517.transformed.events_parsed` p
     WHERE p.event_id = r.event_id
       AND p.event_date = r.event_date
+      -- Bound the parsed table scan to yesterday+today partitions only.
+      AND p.event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   );
