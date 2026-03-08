@@ -403,6 +403,13 @@ fi
 echo ""
 echo "  [OK] Historical ingest complete."
 
+# Clean up: drop the backfill external table (no longer needed)
+echo ""
+echo "  Dropping raw.events_external (backfill data already ingested)..."
+run_bq "Dropping raw.events_external" \
+    rm -f "${PROJECT_ID}:raw.events_external"
+echo "  [OK] raw.events_external dropped."
+
 # ===================================================================
 # STEP 6: Transform ALL historical data
 # ===================================================================
@@ -498,17 +505,16 @@ echo ""
 echo "  What was done:"
 echo "    1. Deleted old raw.events and transformed.events_parsed tables"
 echo "    2. Re-created empty tables with correct schema/partitioning"
-echo "    3. Ensured both external tables exist:"
-echo "       - raw.events_external (backfill data)"
-echo "       - raw.events_updates_external (updates data)"
+echo "    3. Created external tables for ingestion"
 if [[ "${SKIP_VERIFY}" == true ]]; then
     echo "    4. GCS verification: SKIPPED"
 else
     echo "    4. Verified GCS parquet folder dates match effective_at"
 fi
 echo "    5. Ingested all historical data from BOTH GCS sources"
-echo "    6. Transformed all historical data (with template_name extraction)"
-echo "    7. Scheduled queries set up manually in BigQuery Console"
+echo "    6. Dropped raw.events_external (one-time backfill table)"
+echo "    7. Transformed all historical data (with template_name extraction)"
+echo "    8. Scheduled queries set up manually in BigQuery Console"
 echo ""
 echo "  Schema highlights:"
 echo "    - raw.events: template_id as-is from parquet"
