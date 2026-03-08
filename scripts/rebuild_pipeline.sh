@@ -291,23 +291,27 @@ echo "  [OK] Tables created."
 # ===================================================================
 step_header 3 "Ensure external tables exist"
 
-# External table for backfill data
+# External table for backfill data (Hive-partitioned: year=.../month=.../day=...)
 echo "  Checking raw.events_external..."
 if ! bq show "${PROJECT_ID}:raw.events_external" > /dev/null 2>&1; then
     run_bq "Creating external table raw.events_external -> gs://${BUCKET}/raw/backfill/events/*" \
         mk --table \
         --external_table_definition="@PARQUET=gs://${BUCKET}/raw/backfill/events/*" \
+        --hive_partitioning_mode=AUTO \
+        --hive_partitioning_source_uri_prefix="gs://${BUCKET}/raw/backfill/events/" \
         "${PROJECT_ID}:raw.events_external"
 else
     echo "  [OK] raw.events_external already exists."
 fi
 
-# External table for updates data
+# External table for updates data (Hive-partitioned: year=.../month=.../day=...)
 echo "  Checking raw.events_updates_external..."
 if ! bq show "${PROJECT_ID}:raw.events_updates_external" > /dev/null 2>&1; then
     run_bq "Creating external table raw.events_updates_external -> gs://${BUCKET}/raw/updates/events/*" \
         mk --table \
         --external_table_definition="@PARQUET=gs://${BUCKET}/raw/updates/events/*" \
+        --hive_partitioning_mode=AUTO \
+        --hive_partitioning_source_uri_prefix="gs://${BUCKET}/raw/updates/events/" \
         "${PROJECT_ID}:raw.events_updates_external"
 else
     echo "  [OK] raw.events_updates_external already exists."
