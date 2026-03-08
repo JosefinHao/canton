@@ -63,4 +63,6 @@ WHERE
     FROM `governence-483517.raw.events` e
     WHERE e.event_id = ext.event_id
       AND e.event_date = DATE(ext.year, ext.month, ext.day)
+      -- Bound the native table scan to yesterday+today partitions only.
+      AND e.event_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   );
