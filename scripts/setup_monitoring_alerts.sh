@@ -5,8 +5,10 @@
 #   1. Email notification channel
 #   2. Log-based metric: canton_scheduled_query_errors  (BQ scheduled query failures)
 #   3. Log-based metric: canton_monitor_critical        (monitor WARNING/CRITICAL)
+#   3b. Log-based metric: canton_gcs_upstream_stale     (GCS upstream data staleness)
 #   4. Alert policy: Scheduled query failures -> email
 #   5. Alert policy: Pipeline monitor critical -> email
+#   5b. Alert policy: GCS upstream data stale -> email
 #
 # Optionally, if MONITOR_CLOUDRUN=true, also creates Cloud Run backup pipeline monitoring:
 #   6. Log-based metric: canton_pipeline_errors  (Cloud Run ERROR logs)
@@ -124,6 +126,32 @@ echo "${METRIC_CONFIG_WARN}" | gcloud logging metrics create canton_monitor_crit
     && echo "  [OK] Log-based metric 'canton_monitor_critical' created." \
     || echo "  [INFO] Metric may already exist or creation requires additional permissions."
 
+# ── 3b. Log-based Metric: GCS Upstream Data Staleness ─────────────────────────
+echo ""
+echo "--- Step 3b: Creating log-based metric: canton_gcs_upstream_stale ---"
+echo "    (Detects when upstream GCS data source stops providing new parquet files)"
+
+METRIC_CONFIG_GCS=$(cat <<'EOF'
+{
+  "name": "canton_gcs_upstream_stale",
+  "description": "Count of WARNING/CRITICAL log entries when the upstream GCS data source is stale (no new parquet files). Detects silent failures where scheduled queries run successfully but ingest 0 rows.",
+  "filter": "jsonPayload.pipeline_monitor.issues=~\"GCS upstream\" AND severity>=\"WARNING\"",
+  "metricDescriptor": {
+    "metricKind": "DELTA",
+    "valueType": "INT64",
+    "unit": "1",
+    "labels": []
+  }
+}
+EOF
+)
+
+echo "${METRIC_CONFIG_GCS}" | gcloud logging metrics create canton_gcs_upstream_stale \
+    --config-from-file=- \
+    --project="${PROJECT_ID}" 2>/dev/null \
+    && echo "  [OK] Log-based metric 'canton_gcs_upstream_stale' created." \
+    || echo "  [INFO] Metric may already exist or creation requires additional permissions."
+
 NOTIFICATIONS_JSON="[]"
 if [ -n "${NOTIFICATION_CHANNEL}" ]; then
     NOTIFICATIONS_JSON="[\"${NOTIFICATION_CHANNEL}\"]"
@@ -223,6 +251,54 @@ echo "${ALERT_POLICY_MONITOR}" | gcloud alpha monitoring policies create \
     --policy-from-file=- \
     --project="${PROJECT_ID}" 2>/dev/null \
     && echo "  [OK] Alert policy 'Canton: Pipeline Monitor Critical' created." \
+    || echo "  [INFO] Policy may already exist or creation requires additional permissions."
+
+# ── 5b. Alert Policy: GCS Upstream Data Staleness ─────────────────────────────
+echo ""
+echo "--- Step 5b: Creating alert policy: Canton GCS Upstream Stale ---"
+
+ALERT_POLICY_GCS=$(cat <<EOF
+{
+  "displayName": "Canton: GCS Upstream Data Stale",
+  "documentation": {
+    "content": "The upstream GCS data source has stopped providing new parquet files. The BigQuery scheduled queries will continue to run successfully but will ingest 0 new rows.\n\nThis typically means the external process that fetches data from the Scan API and writes parquet files to gs://canton-bucket/raw/updates/events/ has stalled.\n\nDiagnose:\n1. Check GCS for recent files: gsutil ls -l gs://canton-bucket/raw/updates/events/migration=0/year=\$(date +%Y)/month=\$(date +%-m)/day=\$(date +%-d)/\n2. Run monitor: python scripts/monitor_pipeline.py --json\n3. Check the upstream data loading process/script that writes to GCS"
+  },
+  "conditions": [
+    {
+      "displayName": "GCS upstream stale events > 0",
+      "conditionThreshold": {
+        "filter": "metric.type=\"logging.googleapis.com/user/canton_gcs_upstream_stale\" AND resource.type=\"global\"",
+        "aggregations": [
+          {
+            "alignmentPeriod": "86400s",
+            "perSeriesAligner": "ALIGN_SUM"
+          }
+        ],
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "trigger": {
+          "count": 1
+        }
+      }
+    }
+  ],
+  "alertStrategy": {
+    "notificationRateLimit": {
+      "period": "86400s"
+    }
+  },
+  "combiner": "OR",
+  "enabled": true,
+  "notificationChannels": ${NOTIFICATIONS_JSON}
+}
+EOF
+)
+
+echo "${ALERT_POLICY_GCS}" | gcloud alpha monitoring policies create \
+    --policy-from-file=- \
+    --project="${PROJECT_ID}" 2>/dev/null \
+    && echo "  [OK] Alert policy 'Canton: GCS Upstream Data Stale' created." \
     || echo "  [INFO] Policy may already exist or creation requires additional permissions."
 
 # ── 6. Optional: Cloud Run Backup Pipeline Monitoring ─────────────────────────
@@ -342,8 +418,10 @@ echo ""
 echo "Resources created (or already existed) — PRIMARY pipeline monitoring:"
 echo "  - Log-based metric:  canton_scheduled_query_errors"
 echo "  - Log-based metric:  canton_monitor_critical"
+echo "  - Log-based metric:  canton_gcs_upstream_stale"
 echo "  - Alert policy:      Canton: Scheduled Query Failures"
 echo "  - Alert policy:      Canton: Pipeline Monitor Critical"
+echo "  - Alert policy:      Canton: GCS Upstream Data Stale"
 if [ "${MONITOR_CLOUDRUN}" = "true" ]; then
     echo ""
     echo "Resources created — BACKUP pipeline monitoring (MONITOR_CLOUDRUN=true):"
