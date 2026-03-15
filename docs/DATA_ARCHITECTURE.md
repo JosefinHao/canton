@@ -44,6 +44,18 @@ This document describes the complete data architecture for the Canton on-chain d
                     raw.events_external (backfill)
                     raw.events_updates_external (updates)
                              │
+                             ├──────────────────────────────────────────┐
+                             │                                          │
+  ┌──────────────────────────▼───────────────────────────────────────┐  │
+  │  BigQuery Scheduled Query: Canton: check_gcs_freshness           │  │
+  │  Schedule: Daily at 23:30 UTC                                    │  │
+  │  SQL: bigquery_scheduled/check_gcs_freshness.sql                 │  │
+  │                                                                  │  │
+  │  ASSERT latest GCS partition >= yesterday.                       │  │
+  │  Fails if upstream stopped writing → triggers scheduled query    │  │
+  │  failure alert → email to josefin@canton.foundation              │  │
+  └──────────────────────────────────────────────────────────────────┘  │
+                                                                        │
   ┌──────────────────────────▼───────────────────────────────────────┐
   │  BigQuery Scheduled Query: Canton: ingest_events_from_gcs        │
   │  Schedule: Daily at 00:00 UTC                                    │
@@ -175,10 +187,9 @@ This document describes the complete data architecture for the Canton on-chain d
   ┌─────────────────────────┐    ┌──────────────────────────────────┐
   │ scripts/monitor_        │    │ scripts/data_quality_checks.py   │
   │ pipeline.py             │    │                                  │
-  │ --notify flag           │    │ - GCS upstream freshness         │
-  │                         │    │ - Row count validation           │
-  │ Checks:                 │    │ - Data freshness                 │
-  │ - GCS upstream freshness│    │ - Timestamp consistency          │
+  │ --notify flag           │    │ - Row count validation           │
+  │                         │    │ - Data freshness                 │
+  │ Checks:                 │    │ - Timestamp consistency          │
   │ - Freshness lag         │    │ - Duplicate detection            │
   │ - Row consistency       │    │ - Null field checks              │
   │ - Volume trends         │    │ - Partition continuity           │
@@ -193,7 +204,6 @@ This document describes the complete data architecture for the Canton on-chain d
   │  Log-based metrics:                                             │
   │  - canton_pipeline_errors (Cloud Run ERROR logs)               │
   │  - canton_monitor_critical (monitor WARNING/CRITICAL)          │
-  │  - canton_gcs_upstream_stale (GCS data source not updating)    │
   └──────────────────────┬──────────────────────────────────────────┘
                          │
                          ▼
@@ -201,7 +211,6 @@ This document describes the complete data architecture for the Canton on-chain d
   │              Google Cloud Monitoring                            │
   │                                                                 │
   │  Alert policies:                                                │
-  │  - Canton: GCS Upstream Data Stale → email                     │
   │  - Canton: Pipeline Errors (Cloud Run) → email                 │
   │  - Canton: Pipeline Monitor Critical → email                   │
   │  - Uptime check: Cloud Run health endpoint (every 5 min)       │
@@ -214,6 +223,7 @@ This document describes the complete data architecture for the Canton on-chain d
 
 | Step | Source | Destination | Trigger | Frequency | Role | Est. Scan |
 |------|--------|-------------|---------|-----------|------|-----------|
+| 0. GCS freshness check | `raw.events_updates_external` (GCS Parquet) | ASSERT (fail = alert) | BigQuery Scheduled Query | Daily 23:30 UTC | **GUARD** | Metadata only |
 | 1. GCS ingest (primary) | `raw.events_updates_external` (GCS Parquet) | `raw.events` (INSERT) | BigQuery Scheduled Query | Daily 00:00 UTC | **PRIMARY** | ~2.69 GB |
 | 2. Transformation | `raw.events` | `transformed.events_parsed` (INSERT) | BQ Scheduled Query | Daily 01:00 UTC | Primary | ~91.5 GB |
 | 3. Live ingest (backup) | Canton Scan API `/v2/updates` | `raw.events` (streaming insert) | Cloud Scheduler | Every 15 min | **BACKUP** | N/A |

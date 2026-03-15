@@ -7,7 +7,6 @@ raw.events and transformed.events_parsed BigQuery tables, and optionally
 validates the live Scan API schema against the expected field set.
 
 Checks performed:
-  0. GCS upstream freshness    - Are new parquet files appearing in GCS?
   1. Row count validation      - raw.events vs events_parsed per partition (last N days)
   2. Data freshness            - How old is the latest partition in each table?
   3. Timestamp consistency     - No future dates, no nulls on critical timestamp columns
@@ -79,11 +78,6 @@ EXPECTED_EVENT_FIELDS = {
     "contract_id",
     "template_id",
 }
-
-# GCS upstream freshness thresholds
-GCS_FRESHNESS_WARNING_HOURS = 26   # Warn if no new GCS files in 26h
-GCS_FRESHNESS_CRITICAL_HOURS = 50  # Critical if no new GCS files in 50h
-GCS_UPDATES_EXTERNAL_TABLE = "governence-483517.raw.events_updates_external"
 
 # Scan API URL for schema check
 SCAN_API_URLS = [
@@ -421,76 +415,6 @@ def check_partition_continuity(
     }
 
 
-def check_gcs_upstream_freshness(
-    client: bigquery.Client,
-) -> Dict[str, Any]:
-    """
-    Check whether the upstream GCS data source is still providing new parquet
-    files. Queries the Hive-partitioned external table to find the most recent
-    partition date. If the latest file is too old, the upstream pipeline that
-    writes data to GCS has stalled.
-
-    This catches the silent failure scenario where the BigQuery scheduled query
-    runs successfully but ingests 0 rows because no new files exist in GCS.
-    """
-    query = f"""
-    SELECT MAX(DATE(year, month, day)) AS latest_gcs_date
-    FROM `{GCS_UPDATES_EXTERNAL_TABLE}`
-    WHERE year >= EXTRACT(YEAR FROM DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))
-      AND month >= EXTRACT(MONTH FROM DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))
-    """
-    try:
-        rows = list(client.query(query).result())
-    except Exception as e:
-        return {
-            "status": "WARNING",
-            "error": str(e),
-            "message": (
-                "Could not query GCS external table. "
-                f"'{GCS_UPDATES_EXTERNAL_TABLE}' may not be accessible."
-            ),
-        }
-
-    if not rows or rows[0].latest_gcs_date is None:
-        return {
-            "status": "CRITICAL",
-            "latest_gcs_date": None,
-            "lag_hours": None,
-            "message": "No data found in GCS external table for the last 7 days. "
-                       "Upstream data pipeline may be completely down.",
-        }
-
-    latest_date = rows[0].latest_gcs_date
-    if isinstance(latest_date, datetime):
-        latest_dt = latest_date
-    else:
-        latest_dt = datetime(latest_date.year, latest_date.month, latest_date.day)
-
-    lag_hours = (datetime.utcnow() - latest_dt).total_seconds() / 3600
-
-    if lag_hours > GCS_FRESHNESS_CRITICAL_HOURS:
-        status = "CRITICAL"
-    elif lag_hours > GCS_FRESHNESS_WARNING_HOURS:
-        status = "WARNING"
-    else:
-        status = "OK"
-
-    warnings = []
-    if status != "OK":
-        warnings.append(
-            f"GCS upstream stale: latest partition is {latest_date} "
-            f"({lag_hours:.1f}h ago). The upstream data pipeline that writes "
-            f"parquet files to GCS may have stopped."
-        )
-
-    return {
-        "status": status,
-        "latest_gcs_date": str(latest_date),
-        "lag_hours": round(lag_hours, 1),
-        "warnings": warnings,
-    }
-
-
 def check_schema_drift(skip_api: bool = False) -> Dict[str, Any]:
     """
     Fetch a small sample from the Scan API and verify that all expected
@@ -629,20 +553,6 @@ def print_human_report(checks: Dict[str, Any]) -> None:
     print(f"Checked at: {checks['checked_at']}")
     print("=" * 70)
 
-    # 0. GCS upstream freshness
-    print("\n--- 0. GCS Upstream Freshness ---")
-    gf = checks.get("gcs_upstream_freshness", {})
-    m = _status_marker(gf.get("status", "UNKNOWN"))
-    gcs_date = gf.get("latest_gcs_date", "N/A")
-    gcs_lag = gf.get("lag_hours", "N/A")
-    print(f"  [{m}] latest_gcs_date={gcs_date}  lag={gcs_lag}h  [{gf.get('status', 'UNKNOWN')}]")
-    for w in gf.get("warnings", []):
-        print(f"       [!] {w}")
-    if gf.get("error"):
-        print(f"       [!] Error: {gf['error']}")
-    if gf.get("status") == "OK":
-        print(f"       [+] GCS upstream is providing fresh data")
-
     # 1. Row counts
     print("\n--- 1. Row Count Validation (raw vs parsed) ---")
     rc = checks.get("row_count_by_partition", {})
@@ -778,7 +688,6 @@ def main():
 
     # Run all checks
     check_fns = [
-        ("gcs_upstream_freshness", lambda: check_gcs_upstream_freshness(client)),
         ("row_count_by_partition", lambda: check_row_count_by_partition(client, args.days)),
         ("data_freshness",         lambda: check_data_freshness(client)),
         ("timestamp_consistency",  lambda: check_timestamp_consistency(client, args.days)),
