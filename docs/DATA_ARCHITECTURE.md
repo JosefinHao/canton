@@ -175,9 +175,10 @@ This document describes the complete data architecture for the Canton on-chain d
   ┌─────────────────────────┐    ┌──────────────────────────────────┐
   │ scripts/monitor_        │    │ scripts/data_quality_checks.py   │
   │ pipeline.py             │    │                                  │
-  │ --notify flag           │    │ - Row count validation           │
-  │                         │    │ - Data freshness                 │
-  │ Checks:                 │    │ - Timestamp consistency          │
+  │ --notify flag           │    │ - GCS upstream freshness         │
+  │                         │    │ - Row count validation           │
+  │ Checks:                 │    │ - Data freshness                 │
+  │ - GCS upstream freshness│    │ - Timestamp consistency          │
   │ - Freshness lag         │    │ - Duplicate detection            │
   │ - Row consistency       │    │ - Null field checks              │
   │ - Volume trends         │    │ - Partition continuity           │
@@ -192,6 +193,7 @@ This document describes the complete data architecture for the Canton on-chain d
   │  Log-based metrics:                                             │
   │  - canton_pipeline_errors (Cloud Run ERROR logs)               │
   │  - canton_monitor_critical (monitor WARNING/CRITICAL)          │
+  │  - canton_gcs_upstream_stale (GCS data source not updating)    │
   └──────────────────────┬──────────────────────────────────────────┘
                          │
                          ▼
@@ -199,6 +201,7 @@ This document describes the complete data architecture for the Canton on-chain d
   │              Google Cloud Monitoring                            │
   │                                                                 │
   │  Alert policies:                                                │
+  │  - Canton: GCS Upstream Data Stale → email                     │
   │  - Canton: Pipeline Errors (Cloud Run) → email                 │
   │  - Canton: Pipeline Monitor Critical → email                   │
   │  - Uptime check: Cloud Run health endpoint (every 5 min)       │
