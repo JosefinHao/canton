@@ -46,81 +46,6 @@ ROW_DIFF_THRESHOLD = 1000       # Acceptable row difference between raw and pars
 VOLUME_DROP_PCT = 50            # Warn if daily volume drops more than 50% vs avg
 VOLUME_SPIKE_PCT = 300          # Warn if daily volume spikes more than 300% vs avg
 INGESTION_STATE_STALE_HOURS = 48  # Warn if ingestion state not updated in N hours
-GCS_FRESHNESS_WARNING_HOURS = 26  # Warn if no new GCS files in 26h (daily uploads expected)
-GCS_FRESHNESS_CRITICAL_HOURS = 50 # Critical if no new GCS files in 50h
-
-# External tables pointing to GCS
-GCS_UPDATES_EXTERNAL_TABLE = "governence-483517.raw.events_updates_external"
-
-
-def check_gcs_data_freshness(client: bigquery.Client) -> dict:
-    """
-    Check whether the upstream GCS data source is still providing new files.
-
-    Queries the Hive-partitioned external table (raw.events_updates_external)
-    to find the most recent partition date. If no files exist for recent days,
-    it means the upstream data pipeline that writes parquet files to GCS has
-    stalled — even though the BigQuery scheduled query will keep running
-    successfully with 0 new rows.
-
-    This is the gap that caused the March 11 silent failure: the scheduled
-    query ran fine but had nothing to ingest because GCS stopped receiving data.
-    """
-    query = f"""
-    SELECT MAX(DATE(year, month, day)) AS latest_gcs_date
-    FROM `{GCS_UPDATES_EXTERNAL_TABLE}`
-    WHERE year >= EXTRACT(YEAR FROM DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))
-      AND month >= EXTRACT(MONTH FROM DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY))
-    """
-    try:
-        rows = list(client.query(query).result())
-    except Exception as e:
-        return {
-            "status": "WARNING",
-            "error": f"Could not query GCS external table: {e}",
-            "message": (
-                "Unable to check GCS freshness. The external table "
-                f"'{GCS_UPDATES_EXTERNAL_TABLE}' may not be accessible."
-            ),
-        }
-
-    if not rows or rows[0].latest_gcs_date is None:
-        return {
-            "status": "CRITICAL",
-            "latest_gcs_date": None,
-            "lag_hours": None,
-            "message": "No data found in GCS external table for the last 7 days",
-        }
-
-    from datetime import date as date_type
-    latest_date = rows[0].latest_gcs_date
-    if isinstance(latest_date, date_type) and not isinstance(latest_date, datetime):
-        latest_dt = datetime(latest_date.year, latest_date.month, latest_date.day)
-    else:
-        latest_dt = latest_date
-
-    lag_hours = (datetime.utcnow() - latest_dt).total_seconds() / 3600
-
-    if lag_hours > GCS_FRESHNESS_CRITICAL_HOURS:
-        status = "CRITICAL"
-    elif lag_hours > GCS_FRESHNESS_WARNING_HOURS:
-        status = "WARNING"
-    else:
-        status = "OK"
-
-    return {
-        "latest_gcs_date": str(latest_date),
-        "lag_hours": round(lag_hours, 1),
-        "status": status,
-        "message": (
-            f"Latest GCS partition: {latest_date}, {lag_hours:.1f}h ago"
-            if status == "OK"
-            else f"GCS upstream stale: latest partition is {latest_date} "
-                 f"({lag_hours:.1f}h ago). Upstream may have stopped writing files."
-        ),
-    }
-
-
 def check_data_freshness(client: bigquery.Client) -> dict:
     """Check how fresh the data is in both tables."""
     results = {}
@@ -358,12 +283,6 @@ def emit_cloud_logging_alert(overall_status: str, checks: dict) -> None:
     issues: List[str] = []
 
     # Collect specific issues
-    gcs = checks.get("gcs_data_freshness", {})
-    if gcs.get("status") in ("WARNING", "CRITICAL"):
-        issues.append(
-            f"GCS upstream {gcs['status']}: {gcs.get('message', 'stale data')}"
-        )
-
     freshness = checks.get("data_freshness", {})
     for label in ("raw", "parsed"):
         info = freshness.get(label, {})
@@ -437,7 +356,6 @@ def main():
     if not args.json:
         print("Running pipeline health checks...", file=sys.stderr)
 
-    checks["gcs_data_freshness"] = check_gcs_data_freshness(client)
     checks["data_freshness"] = check_data_freshness(client)
     checks["row_consistency"] = check_row_consistency(client)
     checks["table_stats"] = check_table_stats(client)
@@ -484,18 +402,6 @@ def main():
         print("PIPELINE HEALTH MONITOR")
         print(f"Checked at: {checks['checked_at']}")
         print("=" * 70)
-
-        # GCS Upstream Freshness
-        print("\n--- GCS Upstream Freshness ---")
-        gcs = checks.get("gcs_data_freshness", {})
-        gcs_status = gcs.get("status", "UNKNOWN")
-        gcs_lag = gcs.get("lag_hours", "N/A")
-        gcs_date = gcs.get("latest_gcs_date", "N/A")
-        print(f"  [{m(gcs_status)}] latest_gcs_date={gcs_date}  lag={gcs_lag}h  [{gcs_status}]")
-        if gcs.get("message"):
-            print(f"       {gcs['message']}")
-        if gcs.get("error"):
-            print(f"       Error: {gcs['error']}")
 
         # Data Freshness
         print("\n--- Data Freshness ---")

@@ -1,9 +1,10 @@
 #!/bin/bash
 # Setup BigQuery Scheduled Queries for the Canton data pipeline
 #
-# Creates two scheduled queries in sequence:
-#   1. Canton: ingest_events_from_gcs  - Daily at 00:00 UTC: GCS → raw.events
-#   2. Canton: transform_raw_events    - Daily at 01:00 UTC: raw.events → transformed.events_parsed
+# Creates three scheduled queries in sequence:
+#   1. Canton: check_gcs_freshness     - Daily at 23:30 UTC: ASSERT GCS has fresh data
+#   2. Canton: ingest_events_from_gcs  - Daily at 00:00 UTC: GCS → raw.events
+#   3. Canton: transform_raw_events    - Daily at 01:00 UTC: raw.events → transformed.events_parsed
 #
 # Prerequisites:
 #   - gcloud CLI installed and authenticated
@@ -63,10 +64,25 @@ create_scheduled_query() {
 }
 
 # ---------------------------------------------------------------
-# Query 1: Ingest new events from GCS into raw.events
+# Query 1: Check GCS upstream data freshness
 # ---------------------------------------------------------------
 echo ""
-echo "--- Query 1: ingest_events_from_gcs ---"
+echo "--- Query 1: check_gcs_freshness ---"
+echo "Description: Asserts that GCS has fresh parquet files. Fails if"
+echo "             upstream stopped writing data (triggers scheduled query alert)."
+
+GCS_CHECK_FAILED=0
+create_scheduled_query \
+    "Canton: check_gcs_freshness" \
+    "every 24 hours" \
+    "${SCRIPT_DIR}/check_gcs_freshness.sql" \
+    || GCS_CHECK_FAILED=$?
+
+# ---------------------------------------------------------------
+# Query 2: Ingest new events from GCS into raw.events
+# ---------------------------------------------------------------
+echo ""
+echo "--- Query 2: ingest_events_from_gcs ---"
 echo "Description: Reads new parquet files from GCS external table and"
 echo "             inserts into raw.events (dedup on event_id + event_date)."
 
@@ -78,10 +94,10 @@ create_scheduled_query \
     || INGEST_FAILED=$?
 
 # ---------------------------------------------------------------
-# Query 2: Transform raw events to parsed format
+# Query 3: Transform raw events to parsed format
 # ---------------------------------------------------------------
 echo ""
-echo "--- Query 2: transform_raw_events ---"
+echo "--- Query 3: transform_raw_events ---"
 echo "Description: Transforms raw.events -> transformed.events_parsed"
 echo "             (parses timestamps, flattens arrays, parses JSON)."
 
@@ -100,15 +116,16 @@ echo "======================================"
 echo "Setup Summary"
 echo "======================================"
 
-if [ "${INGEST_FAILED}" -eq 0 ] && [ "${TRANSFORM_FAILED}" -eq 0 ]; then
-    echo "[OK] Both scheduled queries created successfully."
+if [ "${GCS_CHECK_FAILED}" -eq 0 ] && [ "${INGEST_FAILED}" -eq 0 ] && [ "${TRANSFORM_FAILED}" -eq 0 ]; then
+    echo "[OK] All scheduled queries created successfully."
     echo ""
     echo "IMPORTANT - Adjust start times in BigQuery Console:"
     echo "  The bq CLI schedules queries starting at creation time."
     echo "  Manually set the scheduled start times to:"
+    echo "    Canton: check_gcs_freshness     -> 23:30 UTC daily"
     echo "    Canton: ingest_events_from_gcs  -> 00:00 UTC daily"
     echo "    Canton: transform_raw_events    -> 01:00 UTC daily"
-    echo "  (The 1-hour offset ensures ingest completes before transform runs.)"
+    echo "  (check runs before ingest; 1-hour offset ensures ingest completes before transform.)"
 else
     echo "[WARN] One or more queries may not have been created. See manual"
     echo "       instructions below."
@@ -125,16 +142,24 @@ echo ""
 echo "Prerequisite: Enable BigQuery Data Transfer API"
 echo "  gcloud services enable bigquerydatatransfer.googleapis.com --project ${PROJECT_ID}"
 echo ""
-echo "Query 1 -- ingest_events_from_gcs:"
+echo "Query 1 -- check_gcs_freshness:"
 echo "  1. Open: https://console.cloud.google.com/bigquery?project=${PROJECT_ID}"
 echo "  2. Click 'Scheduled queries' -> 'Create scheduled query'"
-echo "  3. Paste contents of: ${SCRIPT_DIR}/ingest_events_from_gcs.sql"
-echo "  4. Display name:  'Canton: ingest_events_from_gcs'"
-echo "  5. Schedule type: Custom (cron): 0 0 * * *"
+echo "  3. Paste contents of: ${SCRIPT_DIR}/check_gcs_freshness.sql"
+echo "  4. Display name:  'Canton: check_gcs_freshness'"
+echo "  5. Schedule type: Custom (cron): 30 23 * * *"
 echo "  6. Time zone: UTC, Location: ${LOCATION}"
 echo "  7. Click 'Schedule'"
 echo ""
-echo "Query 2 -- transform_raw_events:"
+echo "Query 2 -- ingest_events_from_gcs:"
+echo "  1. Click 'Create scheduled query' again"
+echo "  2. Paste contents of: ${SCRIPT_DIR}/ingest_events_from_gcs.sql"
+echo "  3. Display name:  'Canton: ingest_events_from_gcs'"
+echo "  4. Schedule type: Custom (cron): 0 0 * * *"
+echo "  5. Time zone: UTC, Location: ${LOCATION}"
+echo "  6. Click 'Schedule'"
+echo ""
+echo "Query 3 -- transform_raw_events:"
 echo "  1. Click 'Create scheduled query' again"
 echo "  2. Paste contents of: ${SCRIPT_DIR}/transform_events.sql"
 echo "  3. Display name:  'Canton: transform_raw_events'"
